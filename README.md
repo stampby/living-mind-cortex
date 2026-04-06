@@ -134,7 +134,11 @@ Your agent can now:
 
 ## 👁️ Dashboard Preview
 
-*(Screenshot goes here)*
+### Visual Cortex (Nodeus Ledger)
+![Nodeus Ledger Dashboard](screenshots/dashboard.png)
+
+### The Tree of Life (3D Topology Viewer)
+![3D Motherboard Topology](screenshots/motherboard.png)
 
 ---
 
