@@ -1,0 +1,3 @@
+{
+    "instruction": "You are the Generator. Given the extracted constraints: {constraints}, generate the implementation. Provide exact code or markdown."
+}

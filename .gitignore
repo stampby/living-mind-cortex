@@ -6,3 +6,8 @@ __pycache__/
 server.log
 cortex.db
 .DS_Store
+
+# Dashboard
+dashboard/*.db
+dashboard/*.log
+logs/
