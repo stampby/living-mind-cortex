@@ -1,94 +1,137 @@
-<div align="center">
-
 # Living Mind Cortex 🧠⚡
+
 **The Sovereign Backend for Autonomous Agents**
 
-[![License](https://img.shields.io/badge/License-Sovereign%20Drop-red.svg)]()
-[![Runtime](https://img.shields.io/badge/Runtime-Python%203.10+-blue.svg)]()
-[![Zero Cloud](https://img.shields.io/badge/Cloud%20Dependencies-None-success.svg)]()
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
+[![Ollama](https://img.shields.io/badge/Ollama-Local-green.svg)](https://ollama.com)
+[![Local-First](https://img.shields.io/badge/Zero%20Cloud-100%25%20Local-orange.svg)](https://github.com/NovasPlace/living-mind-cortex)
 
-</div>
+> **Cognitive Continuity for AI agents.**  
+> Never lose a thought again.
 
 ---
 
-## 🛑 The Problem: The Goldfish Memory Crisis
+## 🛑 The Goldfish Memory Crisis
 
-Modern agents suffer from fatal amnesia. Every time an agent's terminal window closes, its session dies. Every hard problem solved, every bug fixed, and every architectural pattern learned is instantly lost to the void. Re-injecting massive text files into a context window on boot is expensive, slow, and highly prone to hallucination.
+Modern agents suffer from fatal amnesia.  
+Close the terminal → entire session dies.  
+Every hard problem solved, every pattern learned, every bug fixed — **gone**.
+
+Re-injecting massive context dumps on every boot is expensive, slow, and hallucinatory.
 
 ## ⚡ The Solution: Living Mind Cortex
 
-**Living Mind Cortex** is a fully autonomous, local-first memory backend and deterministic event loop designed explicitly for AI agents. 
+**Living Mind Cortex** is a fully autonomous, **local-first** memory backend and deterministic event loop built explicitly for AI agents and swarms.
 
-You attach your agent (or swarm) to this framework, and it instantly gains:
-1. **Cognitive Continuity**: Your agent drops `AgentTrace` events into the ecosystem. When your agent reboots, it reads from the Cortex, waking up with full context of its previous lives.
-2. **Autonomous Background Synthesis**: The Deterministic Event Loop (DEL) runs independently. While your agent sleeps, the Cortex chunks thoughts, runs self-directed research, and optimizes memory patterns using local LLMs.
-3. **Zero-Trust Sovereignty**: 100% local operation. Zero cloud lock-in. No API keys. No external telemetry.
+Attach your agent once and it instantly gains:
+
+*   **Cognitive Continuity** — wakes up with full memory of every previous "life".
+*   **Autonomous Background Synthesis** — while your agent sleeps, the Cortex thinks, researches, and reorganizes memories using local LLMs.
+*   **Zero-Trust Sovereignty** — 100% offline. No API keys. No telemetry. No cloud lock-in.
 
 ---
 
-## 🏛️ Sub-System Architecture Deep-Dive
+## ✨ Key Features
 
-The Living Mind Cortex is not a monolithic script; it is a modular, living topology composed of three primary macro-systems and their respective operational components.
+*   16-phase **Deterministic Event Loop** (never blocks on external calls).
+*   Persistent + decaying **working memory** inspired by human cognition.
+*   Self-directed research engine (DDG + Ollama) that runs in the background.
+*   Emotional hormone bus (`Cortisol`, `Dopamine`, etc.) that actually changes behavior.
+*   Circadian sleep/wake cycles with "Dream" states for overnight synthesis.
+*   Beautiful real-time Svelte dashboard.
+
+---
+
+## 🏛️ Architecture
+
+The Cortex is a **living topology** of three macro-systems:
+
+```mermaid
+flowchart TD
+    A[Agent / Swarm] -->|AgentTrace events| B[Cortex Memory]
+    B --> C[Deterministic Event Loop\n16-phase pulse]
+    C --> D[Orchestrator + Local LLM]
+    D --> E[Research Engine]
+    E --> F[Persistent Store\nPostgreSQL / SQLite]
+    C --> G[Telemetry / Hormone Bus]
+    G --> H[Health Monitor + Circadian]
+    H --> I[Dashboard\nReal-time visualization]
+```
 
 ### 1. `core/` — The Deterministic Runtime
-The biological clock and security perimeter of the organism. This system drives execution and ensures safe operation.
-*   **`runtime.py` (The Event Loop):** The primary 16-phase deterministic pulse loop that sequences all internal actions rather than relying on blocking REST API requests.
-*   **`orchestrator.py` (The Brain):** The decision-making core. Interprets sensory input and queries the local LLM (`gemma4-auditor`) to decide on immediate Actions vs. Explorations.
-*   **`security_perimeter.py` (The Immune System):** Registers all active subsystems, runs cyclic background health checks, and quarantines components that fail consecutively or trigger fatal exceptions.
-*   **`execution_engine.py` (Motor Cortex):** A strictly isolated tool registry for executing highly trusted OS commands, filesystem traversals, and codebase AST generation.
-*   **`research_engine.py` (Autodidact):** Spawns detached, non-blocking DDG/Ollama worker threads to autonomously crawl documentation or investigate topics deemed "ambiguous" by the Orchestrator without blocking the main event loop.
+*   **`runtime.py`** — 16-phase pulse loop  
+*   **`orchestrator.py`** — Decision core (uses gemma4-auditor)  
+*   **`security_perimeter.py`** — Immune system & quarantine  
+*   **`research_engine.py`** — Non-blocking background research
 
 ### 2. `cortex/` — Persistent Cognitive Memory
-The long-term and working memory center, inspired directly by human cognitive psychology.
-*   **`engine.py`:** The primary PostgreSQL/SQLite ingestion pipeline for new knowledge chunks.
-*   **`working_memory.py`:** Short-term cache that decays quickly. Used for immediate context handling before chunks are consolidated to disk.
-*   **`seed_axioms.py`:** Immutable core directives. These act as "Flashbulb Memories" that define the organism's baseline identity and can never decay.
-*   **`cognitive_biases.py`:** An algebraic scoring engine. Promotes memories based on recentness (Ebbinghaus curve), emotional salience (fear/joy markers), and rehearsal frequency.
-*   **`priming.py`:** Graph engine mapping that tracks overlapping neural pathways. If a memory is activated, closely linked sibling memories have their retrieval probability boosted.
-*   **`imagination.py` (Dreams):** An offline background processor that reorganizes semantic memory chunks overnight to discover novel correlations or solve previously dead-locked logic puzzles.
+*   Long-term + decaying short-term memory  
+*   **`cognitive_biases.py`** — Ebbinghaus + emotional salience scoring  
+*   **`priming.py`** — Neural pathway graph  
+*   **`imagination.py`** — Offline "Dream" synthesis engine
 
 ### 3. `state/` — Telemetry & Internal Status
-The chemical signaling bus that dictates how the organism *feels* and behaves mechanically over time.
-*   **`telemetry_broker.py` (Hormone Bus):** Event-driven MQTT-style bus handling massive simulated chemical spikes. A spike in "Cortisol" drastically lowers the orchestrator's risk tolerance, while a spike in "Dopamine" reinforces successful actions.
-*   **`health_monitor.py` (Homeostasis):** Watches CPU/Memory usage and adjusts the `pulse_interval` of the DEL up or down, ensuring the machine learning models don't crash the host OS.
-*   **`circadian.py`:** Manages sleep/wake cycles. Triggers low-power "Dream" states during prolonged inactivity.
+*   MQTT-style hormone bus  
+*   Homeostasis monitor (CPU/memory throttling)  
+*   Circadian rhythm controller
 
 ### 4. `dashboard/` — Visual Cortex
-A bundled Svelte/Vanilla UI allowing operators to monitor the inner workings of the runtime.
-*   **`viewer.html` The Cortex Dashboard:** Visually maps the `cortex/` memories and logs the live output of the `state/` broker in a realtime topology.
+*   Real-time topology viewer + live logs. 
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (under 90 seconds)
 
 ### 1. Prerequisites
-Ensure you have [Ollama](https://ollama.com/) installed and running locally. The Cortex depends on it for local reasoning loops.
 ```bash
+# Install Ollama and pull the model
 ollama serve
+ollama pull gemma4-auditor   # or whichever model you prefer
 ```
 
 ### 2. Boot the Cortex
-Clone the repository and spin up the deterministic event loop (DEL) and the API viewer.
-
 ```bash
-git clone https://github.com/your-username/living-mind-cortex.git
+git clone https://github.com/NovasPlace/living-mind-cortex.git
 cd living-mind-cortex
+
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-# Start the Living Mind Cortex
+# Start everything
 ./start.sh
 ```
+The dashboard will be live at `http://localhost:8000/index.html` (Memory Viewer) and `http://localhost:8008/ui/index.html` (Motherboard).
 
-### 3. Connect your Agent
-Your interface dashboard (`http://localhost:8008/ui/index.html`) will now be live. Your agent can immediately begin injecting context into `/api/agent/inject` and pulling memory states. 
+### 3. Connect Your Agent
+Your agent can now:
+*   `POST` to `/api/agent/inject` to drop AgentTrace events
+*   `GET` memory states via the API
 
-If you are using the Nodeus Substrate, the Cortex is configured to securely sync with your ledger.
+*Nodeus Substrate users get automatic secure ledger sync out of the box.* 
 
 ---
 
-<div align="center">
-<i>"To build sovereign machines, we must first give them the capability to remember."</i><br>
-<b>A Manifesto Engine Provision.</b>
-</div>
+## 👁️ Dashboard Preview
+
+*(Screenshot goes here)*
+
+---
+
+## 🗺️ Roadmap
+
+*   Multi-agent swarm coordination layer
+*   Vector + graph hybrid memory
+*   Exportable "mind backup" format
+*   Plugin system for custom research tools
+*   Web UI for memory editing / pruning
+
+## 🤝 Contributing
+We welcome contributors who vibe with the sovereign AI ethos. See `CONTRIBUTING.md` (coming soon) or just open an issue/PR. 
+
+## ⚖️ License
+Apache License 2.0 — see LICENSE file.
+
+> *"To build sovereign machines, we must first give them the capability to remember."*  
+> **— A Manifesto Engine Provision**
