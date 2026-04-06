@@ -3,12 +3,26 @@
 **The Sovereign Backend for Autonomous Agents**
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://www.python.org/)
 [![Ollama](https://img.shields.io/badge/Ollama-Local-green.svg)](https://ollama.com)
-[![Local-First](https://img.shields.io/badge/Zero%20Cloud-100%25%20Local-orange.svg)](https://github.com/NovasPlace/living-mind-cortex)
+[![Local-First](https://img.shields.io/badge/100%25%20Local-orange.svg)](https://github.com/NovasPlace/living-mind-cortex)
+[![Stars](https://img.shields.io/github/stars/NovasPlace/living-mind-cortex?style=social)](https://github.com/NovasPlace/living-mind-cortex)
 
 > **Cognitive Continuity for AI agents.**  
 > Never lose a thought again.
+
+---
+
+## 📖 Table of Contents
+- [The Goldfish Memory Crisis](#-the-goldfish-memory-crisis)
+- [The Solution](#-the-solution-living-mind-cortex)
+- [Key Features](#-key-features)
+- [Architecture](#-architecture)
+- [Quick Start](#-quick-start-under-90-seconds)
+- [Dashboard Preview](#-dashboard-preview)
+- [Roadmap](#-roadmap)
+- [Contributing](#-contributing)
+- [License](#%EF%B8%8F-license)
 
 ---
 
@@ -26,20 +40,20 @@ Re-injecting massive context dumps on every boot is expensive, slow, and halluci
 
 Attach your agent once and it instantly gains:
 
-*   **Cognitive Continuity** — wakes up with full memory of every previous "life".
-*   **Autonomous Background Synthesis** — while your agent sleeps, the Cortex thinks, researches, and reorganizes memories using local LLMs.
-*   **Zero-Trust Sovereignty** — 100% offline. No API keys. No telemetry. No cloud lock-in.
+- **Cognitive Continuity** — wakes up with full memory of every previous “life”
+- **Autonomous Background Synthesis** — while your agent sleeps, the Cortex thinks, researches, and reorganizes memories using local LLMs
+- **Zero-Trust Sovereignty** — 100% offline. No API keys. No telemetry. No cloud lock-in.
 
 ---
 
 ## ✨ Key Features
 
-*   16-phase **Deterministic Event Loop** (never blocks on external calls).
-*   Persistent + decaying **working memory** inspired by human cognition.
-*   Self-directed research engine (DDG + Ollama) that runs in the background.
-*   Emotional hormone bus (`Cortisol`, `Dopamine`, etc.) that actually changes behavior.
-*   Circadian sleep/wake cycles with "Dream" states for overnight synthesis.
-*   Beautiful real-time Svelte dashboard.
+- 16-phase **Deterministic Event Loop** (never blocks on external calls)
+- Persistent + decaying **working memory** inspired by human cognition
+- Self-directed research engine (DDG + Ollama) running in the background
+- Emotional **hormone bus** (`Cortisol`, `Dopamine`, etc.) that actually changes behavior
+- Circadian sleep/wake cycles with “Dream” states for overnight synthesis
+- Beautiful real-time Svelte dashboard
 
 ---
 
@@ -60,24 +74,24 @@ flowchart TD
 ```
 
 ### 1. `core/` — The Deterministic Runtime
-*   **`runtime.py`** — 16-phase pulse loop  
-*   **`orchestrator.py`** — Decision core (uses gemma4-auditor)  
-*   **`security_perimeter.py`** — Immune system & quarantine  
-*   **`research_engine.py`** — Non-blocking background research
+* **`runtime.py`** — 16-phase pulse loop
+* **`orchestrator.py`** — Decision core (uses gemma4-auditor)
+* **`security_perimeter.py`** — Immune system & quarantine
+* **`research_engine.py`** — Non-blocking background research
 
 ### 2. `cortex/` — Persistent Cognitive Memory
-*   Long-term + decaying short-term memory  
-*   **`cognitive_biases.py`** — Ebbinghaus + emotional salience scoring  
-*   **`priming.py`** — Neural pathway graph  
-*   **`imagination.py`** — Offline "Dream" synthesis engine
+* Long-term + decaying short-term memory
+* **`cognitive_biases.py`** — Ebbinghaus + emotional salience scoring
+* **`priming.py`** — Neural pathway graph
+* **`imagination.py`** — Offline “Dream” synthesis engine
 
 ### 3. `state/` — Telemetry & Internal Status
-*   MQTT-style hormone bus  
-*   Homeostasis monitor (CPU/memory throttling)  
-*   Circadian rhythm controller
+* MQTT-style hormone bus
+* Homeostasis monitor (CPU/memory throttling)
+* Circadian rhythm controller
 
 ### 4. `dashboard/` — Visual Cortex
-*   Real-time topology viewer + live logs. 
+* Real-time topology viewer + live logs.
 
 ---
 
@@ -85,8 +99,10 @@ flowchart TD
 
 ### 1. Prerequisites
 ```bash
-# Install Ollama and pull the model
+# Start Ollama
 ollama serve
+
+# Pull the model used by the orchestrator
 ollama pull gemma4-auditor   # or whichever model you prefer
 ```
 
@@ -102,14 +118,17 @@ pip install -r requirements.txt
 # Start everything
 ./start.sh
 ```
-The dashboard will be live at `http://localhost:8000/index.html` (Memory Viewer) and `http://localhost:8008/ui/index.html` (Motherboard).
+
+The dashboard will be live at:
+* `http://localhost:8000/index.html` (Memory Viewer)
+* `http://localhost:8008/ui/index.html` (Motherboard)
 
 ### 3. Connect Your Agent
 Your agent can now:
-*   `POST` to `/api/agent/inject` to drop AgentTrace events
-*   `GET` memory states via the API
+* POST to `/api/agent/inject` to drop AgentTrace events
+* GET memory states via the API
 
-*Nodeus Substrate users get automatic secure ledger sync out of the box.* 
+*Nodeus Substrate users get automatic secure ledger sync out of the box.*
 
 ---
 
@@ -121,14 +140,18 @@ Your agent can now:
 
 ## 🗺️ Roadmap
 
-*   Multi-agent swarm coordination layer
-*   Vector + graph hybrid memory
-*   Exportable "mind backup" format
-*   Plugin system for custom research tools
-*   Web UI for memory editing / pruning
+- [ ] Multi-agent swarm coordination layer
+- [ ] Vector + graph hybrid memory
+- [ ] Exportable “mind backup” format
+- [ ] Plugin system for custom research tools
+- [ ] Web UI for memory editing / pruning
+
+---
 
 ## 🤝 Contributing
-We welcome contributors who vibe with the sovereign AI ethos. See `CONTRIBUTING.md` (coming soon) or just open an issue/PR. 
+
+We welcome contributors who vibe with the sovereign AI ethos.
+See `CONTRIBUTING.md` (coming soon) or just open an issue/PR. 
 
 ## ⚖️ License
 Apache License 2.0 — see LICENSE file.
