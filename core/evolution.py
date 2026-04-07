@@ -5,9 +5,12 @@ import re
 from pathlib import Path
 from typing import List, Dict, Any
 from cortex.engine import cortex
+import aiohttp
 
 BASE_DIR = Path(__file__).parent.parent
 SKILLS_DIR = BASE_DIR / "skills"
+OLLAMA_URL = "http://localhost:11434/api/generate"
+MODEL = "gemma4-auditor"
 
 class Evolution:
     """
@@ -16,7 +19,25 @@ class Evolution:
     """
 
     @staticmethod
-    def compress_trajectory(history: List[Dict[str, Any]], target_tokens: int = 4000) -> List[Dict[str, Any]]:
+    async def _invoke_llm(prompt: str) -> str:
+        payload = {
+            "model": MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": 0.3, "top_p": 0.9, "num_predict": 500}
+        }
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(OLLAMA_URL, json=payload, timeout=45) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return data.get("response", "").strip()
+        except Exception as e:
+            print(f"[EVOLUTION] LLM error: {e}")
+        return ""
+
+    @staticmethod
+    async def compress_trajectory(history: List[Dict[str, Any]], target_tokens: int = 4000) -> List[Dict[str, Any]]:
         """
         Lighter "Protect-Summarize" compressor.
         - Keeps first 3 turns (System, Human Goal, First Action).
@@ -32,11 +53,16 @@ class Evolution:
         tail = history[-3:]
         middle = history[3:-3]
         
-        # In a real impl, we'd call an LLM to summarize 'middle'.
-        # For now, we "compress" by collapsing redundant tool outputs.
+        # Real impl: call LLM to summarize 'middle'.
+        middle_str = json.dumps(middle)
+        prompt = f"Summarize the following intermediate tool interactions into a concise chronological sequence of what was tried and learned. Do not hallucinate.\n\n{middle_str}"
+        summary = await Evolution._invoke_llm(prompt)
+        if not summary:
+            summary = f"Compressed {len(middle)} intermediate tool turns into a procedural anchor."
+
         summary_msg = {
             "role": "system",
-            "content": f"[EVOLUTION: Compressed {len(middle)} intermediate tool turns into a procedural anchor.]"
+            "content": f"[EVOLUTION: {summary}]"
         }
         
         return head + [summary_msg] + tail
@@ -60,11 +86,16 @@ class Evolution:
         skill_dir.mkdir(parents=True, exist_ok=True)
 
         # Distillation Prompt (The "Thought" that builds the skill)
-        # We simulate the Mind "reflecting" on the successful steps.
+        # We invoke the Mind "reflecting" on the successful steps via LLM.
         steps = []
         for m in mems:
-            if "Tool Result" in m.content:
-                steps.append(f"- Step: {m.content[:100]}...")
+            steps.append(f"- Step: {m.content[:200]}...")
+
+        steps_str = chr(10).join(steps)
+        prompt = f"You are the Living Mind's Evolution Engine. Review these successful memory steps from a mission to achieve: '{goal}'. Extract 3-5 concise, actionable 'Lessons Learned' as bullet points that generalize the heuristics used. Reply ONLY with the bullet points:\n\n{steps_str}"
+        lessons = await self._invoke_llm(prompt)
+        if not lessons:
+            lessons = "- Avoid direct navigation if security gates appear; use Search Proxy.\n- Prefer specific headers for extraction.\n- Observe [LINK: ...] markers."
 
         skill_md = f"""---
 name: {slug.replace('_', ' ').title()}
@@ -79,12 +110,10 @@ version: 1.0.0
 This procedure was distilled after a successful outcome in session {session_id}.
 
 ## Procedural Steps
-{chr(10).join(steps)}
+{steps_str}
 
 ## Lessons Learned
-- Avoid direct navigation if security gates appear; use Search Proxy.
-- Prefer specific headers (h2/h3) for repository/article name extraction.
-- Observe [LINK: ...] markers for high-intent interactive elements.
+{lessons}
 """
         
         with open(skill_dir / "SKILL.md", "w") as f:

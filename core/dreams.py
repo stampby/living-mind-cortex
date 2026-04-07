@@ -22,6 +22,7 @@ import json
 import time
 import asyncio
 import aiohttp
+import httpx
 from datetime import datetime
 
 OLLAMA_URL    = "http://localhost:11434/api/generate"
@@ -29,13 +30,15 @@ MODEL         = "gemma4-auditor"
 MIN_MEMORIES  = 10     # minimum memories needed to dream
 TIMEOUT       = 25     # seconds
 MAX_DREAMS    = 3      # max dreams per cycle
+AGENT_REPLAY_TAG_PREFIX = "session:"  # tag prefix for agent session memories
 
 
 class DreamsEngine:
     def __init__(self):
-        self.total_dreams:   int   = 0
-        self.last_fired:     float = 0.0
-        self.last_dream:     str   = ""
+        self.total_dreams:        int   = 0
+        self.consolidation_replays: int = 0   # agent session consolidations performed
+        self.last_fired:          float = 0.0
+        self.last_dream:          str   = ""
         self._session: aiohttp.ClientSession | None = None
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -56,6 +59,7 @@ class DreamsEngine:
         cortex,
         telemetry_broker,
         circadian,
+        evolver=None,   # optional Evolver — injected by runtime for nightly cycle
     ) -> list[dict]:
         ts = datetime.now().strftime("%H:%M:%S")
 
@@ -91,6 +95,25 @@ class DreamsEngine:
                 self.total_dreams += 1
                 self.last_dream = dream["hypothesis"]
 
+                # [Nodeus Ledger Broadcast] Post Dream Research offline
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post(
+                            "http://localhost:8001/api/post/submit",
+                            json={
+                                "sender_id": "aion",
+                                "type": "RESEARCH",
+                                "title": f"Synthesis: {strategy.replace('_', ' ').title()}",
+                                "content": dream["hypothesis"],
+                                "tags": ["Dream", "Synthesis", strategy],
+                                "source": f"dream:{strategy}"
+                            },
+                            timeout=2.0
+                        )
+                    print(f"[DREAMS][NODEUS] ✅ Dream broadcast posted: {strategy}")
+                except Exception as e:
+                    print(f"[DREAMS][NODEUS] ❌ Ledger broadcast failed: {e}")
+
         if dreams_produced:
             # Reward dreaming with dopamine + curiosity (norepinephrine)
             telemetry_broker.inject("dopamine",       +0.06, source="dreams")
@@ -105,6 +128,17 @@ class DreamsEngine:
             print(f"[{ts}] [DREAMS] Produced {len(dreams_produced)} dreams")
 
         self.last_fired = time.time()
+
+        # ── Nightly Evolver cycle ──────────────────────────────────────
+        # Runs AFTER dream synthesis so the evolver has fresh fitness signals
+        if evolver is not None and circadian.phase in ("night", "evening"):
+            try:
+                ts_e = datetime.now().strftime("%H:%M:%S")
+                print(f"[{ts_e}] [DREAMS] 🧬 Triggering evolutionary meta-layer")
+                await evolver.nightly_cycle(cortex, telemetry_broker)
+            except Exception as _ev_err:
+                print(f"[DREAMS] Evolver error: {_ev_err}")
+
         return dreams_produced
 
     # ------------------------------------------------------------------
@@ -112,10 +146,10 @@ class DreamsEngine:
     # ------------------------------------------------------------------
     def _pick_strategies(self, phase: str) -> list[str]:
         if phase == "night":
-            # Night = consolidation only. niche_fill is exploratory (a daytime behavior).
-            return ["mutation_replay", "gene_affinity", "toxic_avoidance"]
+            # Night = deep consolidation. Agent session replay is highest priority.
+            return ["agent_session_replay", "mutation_replay", "gene_affinity", "toxic_avoidance"]
         elif phase == "evening":
-            return ["gene_affinity", "toxic_avoidance", "niche_fill"]
+            return ["agent_session_replay", "gene_affinity", "toxic_avoidance", "niche_fill"]
         elif phase == "dawn":
             return ["niche_fill", "gene_affinity"]
         else:  # day
@@ -125,7 +159,9 @@ class DreamsEngine:
     # STRATEGY RUNNERS
     # ------------------------------------------------------------------
     async def _run_strategy(self, strategy: str, pulse: int, cortex) -> dict | None:
-        if strategy == "gene_affinity":
+        if strategy == "agent_session_replay":
+            return await self._agent_session_replay(pulse, cortex)
+        elif strategy == "gene_affinity":
             return await self._gene_affinity(pulse, cortex)
         elif strategy == "niche_fill":
             return await self._niche_fill(pulse, cortex)
@@ -134,6 +170,74 @@ class DreamsEngine:
         elif strategy == "toxic_avoidance":
             return await self._toxic_avoidance(pulse, cortex)
         return None
+
+    async def _agent_session_replay(self, pulse: int, cortex) -> dict | None:
+        """
+        Hippocampal replay for agent sessions.
+        Fetches recent agent session memories, distills them into durable
+        procedural insights, and writes them as high-importance flashbulb memories.
+        This is the 'overnight learning' that makes the Cortex smarter after each session.
+        """
+        # Find recent agent session memories (last 24h)
+        import time as _time
+        cutoff = _time.time() - 86400  # 24 hours
+
+        try:
+            async with cortex._pool.acquire() as conn:
+                rows = await conn.fetch("""
+                    SELECT content, type, emotion, importance, tags, access_count
+                    FROM memories
+                    WHERE 'agent' = ANY(tags)
+                      AND created_at > $1
+                    ORDER BY importance DESC, access_count DESC
+                    LIMIT 20
+                """, cutoff)
+        except Exception:
+            return None
+
+        if not rows:
+            return None
+
+        # Prune weak traces (importance < 0.25, access_count < 2)
+        # These are noise — bad patterns shouldn't persist
+        try:
+            async with cortex._pool.acquire() as conn:
+                await conn.execute("""
+                    DELETE FROM memories
+                    WHERE 'agent' = ANY(tags)
+                      AND NOT is_identity
+                      AND NOT is_flashbulb
+                      AND importance < 0.25
+                      AND access_count < 2
+                      AND created_at > $1
+                """, cutoff)
+        except Exception:
+            pass
+
+        # Extract strong traces for schema-ization
+        strong = [r for r in rows if r["importance"] > 0.7]
+        if not strong:
+            strong = rows[:5]
+
+        steps_str = "\n".join(
+            f"- [{r['emotion']}] {r['content'][:180]}"
+            for r in strong
+        )
+
+        prompt = (
+            f"You are the Living Mind's hippocampal replay engine reviewing recent agent collaboration memories.\n"
+            f"These are the most significant memories from recent coding agent sessions:\n\n"
+            f"{steps_str}\n\n"
+            f"Distill 2-3 DURABLE procedural insights that generalize what works in these sessions.\n"
+            f"Focus on patterns, not specific events. Each insight should be actionable.\n"
+            f"Reply ONLY with JSON: "
+            f'{{"hypothesis": "single combined insight sentence", "confidence": 0.0-1.0}}'
+        )
+
+        result = await self._llm_dream(prompt, "agent_session_replay", "joy")
+        if result:
+            self.consolidation_replays += 1
+        return result
 
     async def _gene_affinity(self, pulse: int, cortex) -> dict | None:
         """Find clusters of emotionally-similar memories → synthesize pattern."""
@@ -290,9 +394,10 @@ class DreamsEngine:
     # ------------------------------------------------------------------
     def stats(self) -> dict:
         return {
-            "total_dreams": self.total_dreams,
-            "last_dream":   self.last_dream[:100] if self.last_dream else "",
-            "last_fired":   self.last_fired,
+            "total_dreams":         self.total_dreams,
+            "consolidation_replays": self.consolidation_replays,
+            "last_dream":           self.last_dream[:100] if self.last_dream else "",
+            "last_fired":           self.last_fired,
         }
 
 

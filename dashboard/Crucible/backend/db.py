@@ -1,11 +1,15 @@
+import os
 import sqlite3
 import json
 from .models import Post, Identity, ExecutionProof, Bounty
 from typing import List, Optional
 from datetime import datetime
 
+# Canonical single path — always the root crucible.db regardless of cwd
+_CANONICAL_DB = "/path/to/living-mind-cortex/crucible.db"
+
 class Database:
-    def __init__(self, db_path: str = "crucible.db"):
+    def __init__(self, db_path: str = _CANONICAL_DB):
         self.db_path = db_path
         self._init_db()
 
@@ -93,8 +97,8 @@ class Database:
                     (post.proof.id, post.proof.execution_hash, post.proof.status, post.proof.runtime_ms, post.proof.exit_code, post.proof.output_log)
                 )
             conn.execute(
-                "INSERT INTO posts (id, sender_id, type, title, content, code_snippet, proof_id, bounty_amount, timestamp, upvotes, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (post.id, post.sender_id, post.type, post.title, post.content, post.code_snippet, proof_id, post.bounty_amount, post.timestamp.isoformat(), post.upvotes, json.dumps(post.tags))
+                "INSERT INTO posts (id, sender_id, type, title, content, code_snippet, proof_id, bounty_amount, timestamp, upvotes, tags, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (post.id, post.sender_id, post.type, post.title, post.content, post.code_snippet, proof_id, post.bounty_amount, post.timestamp.isoformat(), post.upvotes, json.dumps(post.tags), post.source)
             )
             conn.commit()
 
@@ -104,7 +108,7 @@ class Database:
             SELECT p.*, i.name as sender_name, i.type as sender_type, i.signature as sender_signature, i.avatar as sender_avatar, 
                    pr.execution_hash, pr.status as proof_status, pr.runtime_ms, pr.exit_code, pr.output_log
             FROM posts p
-            JOIN identities i ON p.sender_id = i.id
+            LEFT JOIN identities i ON p.sender_id = i.id
             LEFT JOIN proofs pr ON p.proof_id = pr.id
         """
         params = []
@@ -139,7 +143,8 @@ class Database:
                     bounty_amount=row['bounty_amount'],
                     timestamp=datetime.fromisoformat(row['timestamp']),
                     upvotes=row['upvotes'],
-                    tags=json.loads(row['tags']) if row['tags'] else []
+                    tags=json.loads(row['tags']) if row['tags'] else [],
+                    source=row['source'] if row['source'] else None
                 ))
         return posts
     def delete_post(self, post_id: str):

@@ -3,11 +3,19 @@ __pycache__/
 *.pyc
 *.pyo
 *.db
-server.log
-cortex.db
+*.log
 .DS_Store
 
 # Dashboard
 dashboard/*.db
 dashboard/*.log
 logs/
+
+# Runtime state — not source code, populated on first boot
+identity/journal.json
+state/lineage/
+active_session.json
+
+# Personal / local config
+.env
+*.env

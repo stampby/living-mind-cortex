@@ -6,7 +6,7 @@
 set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CORTEX_PORT=8008
-DASH_PORT=8000
+DASH_PORT=8001
 LOG_DIR="$SCRIPT_DIR/logs"
 
 mkdir -p "$LOG_DIR"

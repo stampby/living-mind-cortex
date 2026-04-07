@@ -234,3 +234,63 @@ CREATE TABLE IF NOT EXISTS homeostasis_log (
     pulse       BIGINT NOT NULL DEFAULT 0,
     created_at  DOUBLE PRECISION NOT NULL DEFAULT extract(epoch from now())
 );
+
+
+-- ============================================================
+-- AGENT_SESSIONS — Tracks every Antigravity (or external agent)
+-- conversation session end-to-end. Core research dataset.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS agent_sessions (
+    id              TEXT PRIMARY KEY,
+    agent_id        TEXT NOT NULL DEFAULT 'antigravity',
+    started_at      DOUBLE PRECISION NOT NULL DEFAULT extract(epoch from now()),
+    ended_at        DOUBLE PRECISION,
+    task_context    TEXT NOT NULL DEFAULT '',
+    outcome         TEXT CHECK (outcome IN ('success','partial','failure','ongoing')),
+    summary         TEXT,
+    rating          REAL CHECK (rating >= 0.0 AND rating <= 1.0),
+    what_worked     TEXT,
+    what_failed     TEXT,
+    memory_count    INTEGER NOT NULL DEFAULT 0,
+    hormone_snapshot JSONB NOT NULL DEFAULT '{}',   -- hormone state at session start
+    metadata        JSONB NOT NULL DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS agent_sessions_agent_idx ON agent_sessions (agent_id);
+CREATE INDEX IF NOT EXISTS agent_sessions_started_idx ON agent_sessions (started_at DESC);
+CREATE INDEX IF NOT EXISTS agent_sessions_outcome_idx ON agent_sessions (outcome);
+
+
+-- ============================================================
+-- MEMORIES — Pillar 6 additions (safe ALTER, idempotent)
+-- counterfactual_of: fork-point provenance (the "git log")
+-- agent_session_id: which agent session wrote this memory
+-- ============================================================
+DO $$ BEGIN
+    ALTER TABLE memories ADD COLUMN counterfactual_of UUID REFERENCES memories(id) ON DELETE SET NULL;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+
+DO $$ BEGIN
+    ALTER TABLE memories ADD COLUMN agent_session_id TEXT REFERENCES agent_sessions(id) ON DELETE SET NULL;
+EXCEPTION WHEN duplicate_column THEN NULL; END $$;
+
+CREATE INDEX IF NOT EXISTS memories_counterfactual_idx ON memories (counterfactual_of) WHERE counterfactual_of IS NOT NULL;
+CREATE INDEX IF NOT EXISTS memories_agent_session_idx ON memories (agent_session_id) WHERE agent_session_id IS NOT NULL;
+
+
+-- ============================================================
+-- LINEAGE_SNAPSHOTS — Evolver genome archive (Pillar 7)
+-- Every accepted mutation is checkpointed here.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS lineage_snapshots (
+    id              BIGSERIAL PRIMARY KEY,
+    phase_config    JSONB NOT NULL DEFAULT '{}',
+    hormone_genome  JSONB NOT NULL DEFAULT '{}',
+    fitness         REAL NOT NULL DEFAULT 0.0,
+    session_ratings JSONB NOT NULL DEFAULT '[]',
+    accepted_at     DOUBLE PRECISION NOT NULL DEFAULT extract(epoch from now()),
+    generation      INTEGER NOT NULL DEFAULT 0,
+    notes           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS lineage_snapshots_accepted_idx ON lineage_snapshots (accepted_at DESC);

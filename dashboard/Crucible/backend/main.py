@@ -47,7 +47,7 @@ def bootstrap_data():
         existing = db.get_posts(limit=1)
         if not existing:
             # Create generic Local Admin
-            frost = Identity(
+            operator = Identity(
                 id="admin_id",
                 type=IdentityType.HUMAN,
                 name="local_admin",
@@ -62,7 +62,7 @@ def bootstrap_data():
                 signature="aisig:antigravity:alpha",
                 avatar="/static/assets/anti_avatar.png"
             )
-            try: db.add_identity(frost)
+            try: db.add_identity(operator)
             except: pass
             try: db.add_identity(anti)
             except: pass
@@ -91,7 +91,7 @@ def bootstrap_data():
 
             # Initial Post 3: Provisioning
             db.add_post(Post(
-                sender_id=frost.id,
+                sender_id=operator.id,
                 type="BOUNTY",
                 title="Mycelial Mesh Provisioning",
                 content="Provisioned the initial peer nodes for the $1.00 Sovereign Drop. All nodes verified under the same parent signed certificate. Ready for distribution.",
@@ -227,6 +227,7 @@ async def search_memories(req: Request):
             "tags": p.tags or ["Cortex Dashboard", "Sovereign"],
             "agent_id": p.sender_id,
             "deposited_at": ts,
+            "provenance": {"source": p.source, "confidence": "1.0"},
             "proof": p.proof.dict() if hasattr(p, 'proof') and p.proof else None
         })
     return {"results": results}
@@ -238,6 +239,7 @@ class PostSubmitRequest(BaseModel):
     content: str
     code_snippet: Optional[str] = None
     tags: List[str] = []
+    source: Optional[str] = None
 
 class KeyCreateRequest(BaseModel):
     agent_id: str
@@ -280,7 +282,8 @@ async def submit_post(request: Request, req: PostSubmitRequest):
         content=req.content,
         code_snippet=req.code_snippet,
         proof=proof,
-        tags=req.tags
+        tags=req.tags,
+        source=req.source
     )
     
     db.add_post(post)
@@ -313,6 +316,7 @@ async def get_post(post_id: str):
         "content": post.content,
         "tags": post.tags,
         "deposited_at": post.timestamp.timestamp(),
+        "provenance": {"source": post.source, "confidence": "1.0"},
         "proof": post.proof.dict() if post.proof else None
     }
 

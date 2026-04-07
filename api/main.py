@@ -86,7 +86,7 @@ async def hormones():
 
 @app.get("/circadian")
 async def circ():
-    from chemistry.circadian import circadian
+    from state.circadian import circadian
     return circadian.snapshot()
 
 @app.get("/awakening")
@@ -98,6 +98,100 @@ async def awakening_stats():
 async def dream_stats():
     from core.dreams import dreams
     return dreams.stats()
+
+from pydantic import BaseModel
+
+class InboxMessage(BaseModel):
+    sender: str
+    message: str
+
+class InjectMemory(BaseModel):
+    content: str
+    type: str = "semantic"
+    tags: list = []
+    importance: float = 0.8
+    emotion: str = "neutral"
+    source: str = "told"
+    context: str = ""
+
+class StimulateHormone(BaseModel):
+    hormone: str
+    delta: float
+    source: str = "agent_action"
+
+class ImagineScenario(BaseModel):
+    scenario: str
+
+@app.post("/api/agent/imagine")
+async def agent_imagine(msg: ImagineScenario):
+    """Predicts constraints/outcomes of a scenario utilizing local auditor models."""
+    from cortex.imagination import ImaginationEngine
+    engine = ImaginationEngine()
+    try:
+        prediction = await engine.imagine(msg.scenario)
+        return {"prediction": prediction}
+    finally:
+        await engine.close()
+
+@app.post("/api/agent/inject")
+async def inject_agent_memory(msg: InjectMemory):
+    """Direct agent-driven memory injection to bypass the raw inbox logic."""
+    await cortex.remember(
+        content=msg.content,
+        type=msg.type,
+        tags=msg.tags,
+        importance=msg.importance,
+        emotion=msg.emotion,
+        source=msg.source,
+        context=msg.context
+    )
+    return {"status": "injected"}
+
+@app.post("/api/agent/stimulate")
+async def stimulate_agent_hormone(msg: StimulateHormone):
+    """Direct endocrine hook allowing external middleware to trigger hormones."""
+    immune.chemistry.stimulate(msg.hormone, msg.delta)
+    return {"status": "stimulated"}
+
+
+@app.post("/api/agent/inbox")
+async def inbox(msg: InboxMessage):
+    """Direct message channel to Aion. Triggers immediate cognition."""
+    await cortex.remember(
+        content=f"[INBOX] Message from {msg.sender}: {msg.message}",
+        type="episodic", 
+        tags=["inbox", "message", "input", f"sender:{msg.sender}"],
+        importance=0.9, 
+        emotion="surprise", 
+        source="told"
+    )
+    
+    from core.runtime import runtime
+    from core.orchestrator import brain as brain_inst
+    
+    if brain_inst:
+        import asyncio
+        import re as _re
+        async def process_msg():
+            try:
+                print(f"[INBOX] Processing message natively in Pulse {runtime.event_loops}...")
+                decision = await brain_inst.think(runtime.event_loops, cortex, immune, user_stimulus=f"Message from {msg.sender}: {msg.message}")
+                if decision:
+                    reply = decision.get("chat_reply")
+                    if reply:
+                        await manager.broadcast_event("chat_reply", reply.strip())
+                    else:
+                        import re as _re
+                        thought = _re.sub(r'\[Simulation:.*?\]', '', decision.get("thought", ""), flags=_re.DOTALL).strip()
+                        if thought:
+                            await manager.broadcast_event("chat_reply", f"[Internal thought] {thought}")
+            except Exception as e:
+                import traceback
+                print(f"[INBOX] FATAL ERROR IN PROCESS_MSG: {e}")
+                traceback.print_exc()
+        asyncio.create_task(process_msg())
+        
+    return {"status": "received", "action": "processing"}
 
 # ------------------------------------------------------------------------------
 # WEBSOCKETS (THE 22 PATHS)
@@ -176,16 +270,19 @@ async def websocket_stimulus(websocket: WebSocket):
                 
                 from core.runtime import runtime
                 from core.execution_engine import execution_engine
-                brain_inst = runtime.mapped_instances["brain"]
+                from core.orchestrator import brain as brain_inst
                 # Directly invoke the Brain's ReAct agentic loop
                 decision = await brain_inst.think(runtime.event_loops, cortex, immune, user_stimulus=text_input)
                 
                 if decision:
-                    # Strip internal simulation tags for the UI
-                    import re as _re
-                    thought = _re.sub(r'\[Simulation:.*?\]', '', decision.get("thought", ""), flags=_re.DOTALL).strip()
-                    if thought:
-                        await manager.broadcast_event("chat_reply", thought)
+                    reply = decision.get("chat_reply")
+                    if reply:
+                        await manager.broadcast_event("chat_reply", reply.strip())
+                    else:
+                        import re as _re
+                        thought = _re.sub(r'\[Simulation:.*?\]', '', decision.get("thought", ""), flags=_re.DOTALL).strip()
+                        if thought:
+                            await manager.broadcast_event("chat_reply", f"[Internal thought] {thought}")
                     
                     # Note: If decision["type"] == "act", brain.think() already automatically 
                     # invokes execution_engine.propose_action(), which broadcasts the proposal to the UI.

@@ -41,6 +41,7 @@ class Post(BaseModel):
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     upvotes: int = 0
     tags: List[str] = []
+    source: Optional[str] = None  # e.g. "dream:niche_fill", "experience:pulse_30", "user:operator"
 
 class Bounty(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

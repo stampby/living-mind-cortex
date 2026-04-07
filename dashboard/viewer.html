@@ -335,7 +335,13 @@ select option { background: var(--surface2); }
       </select>
     </div>
   </div>
-  <div class="status-dot"><span class="dot"></span><span id="lib-status">CONNECTING</span></div>
+  <div style="display:flex; gap:20px; align-items:center;">
+    <div class="status-dot" title="Immune Proxy Inflammation">
+      <span class="dot" id="exo-dot" style="background:var(--blue)"></span>
+      <span id="exo-status" style="color:var(--blue)">EXO: ---</span>
+    </div>
+    <div class="status-dot"><span class="dot"></span><span id="lib-status">CONNECTING</span></div>
+  </div>
 </header>
 
 <nav>
@@ -578,12 +584,24 @@ select option { background: var(--surface2); }
 </div>
 <script>
 let ALEPH_NODES = JSON.parse(localStorage.getItem('aleph_nodes_v2') || '[]');
+
+let _migrated = false;
+for (let n of ALEPH_NODES) {
+  if (n.url && n.url.includes('8008')) {
+    n.url = n.url.replace('8008', '8001');
+    _migrated = true;
+  }
+}
+if (_migrated) {
+  localStorage.setItem('aleph_nodes_v2', JSON.stringify(ALEPH_NODES));
+}
+
 if (ALEPH_NODES.length === 0) {
   // Seed the Local Sentry by default for the Sovereign Drop
   ALEPH_NODES = [{
     id: 'node_local_default',
     name: 'Local Sentry',
-    url: 'http://localhost:8000',
+    url: 'http://localhost:8001',
     active: true,
     agent: 'sovereign_user'
   }];
@@ -975,6 +993,35 @@ setTheme(initialTheme);
     setInterval(checkHealth, 5000);
   }
 
+  async function checkExoHealth() {
+    try {
+      const r = await fetch('http://localhost:8010/exoskeleton/status');
+      if (r.ok) {
+        const d = await r.json();
+        const el = document.getElementById('exo-status');
+        const dot = document.getElementById('exo-dot');
+        el.textContent = `EXO: ${(d.inflammation * 100).toFixed(0)}%`;
+        if (d.quarantined) {
+           el.style.color = 'var(--orange)';
+           dot.style.background = 'var(--orange)';
+           el.textContent = `EXO QUARANTINE`;
+        } else if (d.inflammation > 0.4) {
+           el.style.color = 'var(--yellow)';
+           dot.style.background = 'var(--yellow)';
+        } else {
+           el.style.color = 'var(--blue)';
+           dot.style.background = 'var(--blue)';
+        }
+      }
+    } catch (e) {
+      document.getElementById('exo-status').textContent = 'EXO: OFFLINE';
+      document.getElementById('exo-status').style.color = 'var(--muted)';
+      document.getElementById('exo-dot').style.background = 'var(--muted)';
+    }
+  }
+  checkExoHealth();
+  setInterval(checkExoHealth, 3000);
+
   // Fetch explore empty state with recent chunks
   loadCategories();
   doSearch('');
@@ -1207,8 +1254,8 @@ async function loadNetwork() {
         <td><span class="mono">${a.agent_id}</span></td>
         <td><span class="badge badge-${a.tier}">${a.tier}</span></td>
         <td><span class="mono" style="color:var(--green)">${a.score}</span></td>
-        <td>${a.total_deposits}</td>
-        <td style="color:var(--muted)">${a.last_active ? new Date(a.last_active*1000).toLocaleDateString() : '–'}</td>
+        <td>${a.deposits}</td>
+        <td style="color:var(--muted)">${a.last_active ? new Date(a.last_active).toLocaleDateString() : '–'}</td>
       </tr>`).join('')
     : `<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:24px">No contributors yet.</td></tr>`;
 
@@ -1479,16 +1526,16 @@ async function showAgentDetail(id) {
       </div>
 
       <div style="font-size: 15px; line-height: 1.7; color: var(--text); margin-bottom: 30px;">
-        Agent standing is earned through knowledge deposits and conflict resolution. This agent has contributed successfully to the network <strong>${s.total_deposits}</strong> times, establishing a standing score that governs federation privileges across the mesh.
+        Agent standing is earned through knowledge deposits and conflict resolution. This agent has contributed successfully to the network <strong>${s.deposits}</strong> times, establishing a standing score that governs federation privileges across the mesh.
       </div>
 
       <div class="detail-section">
         <div class="detail-label">Metrics & Activity</div>
         <div>
           <div class="detail-list-item"><div class="detail-list-icon">✓</div><div>Standing Score: <span style="font-weight:600; color:var(--text); font-family:var(--mono)">${s.score}</span></div></div>
-          <div class="detail-list-item"><div class="detail-list-icon">✓</div><div>Total Deposits: <span style="font-weight:600; color:var(--text); font-family:var(--mono)">${s.total_deposits}</span></div></div>
+          <div class="detail-list-item"><div class="detail-list-icon">✓</div><div>Total Deposits: <span style="font-weight:600; color:var(--text); font-family:var(--mono)">${s.deposits}</span></div></div>
           <div class="detail-list-item"><div class="detail-list-icon">✓</div><div>Standing Tier: <span style="color:var(--muted)">${s.tier}</span></div></div>
-          <div class="detail-list-item"><div class="detail-list-icon">✓</div><div>Last Activity: <span style="color:var(--muted)">${s.last_active ? new Date(s.last_active*1000).toLocaleString() : 'Never'}</span></div></div>
+          <div class="detail-list-item"><div class="detail-list-icon">✓</div><div>Last Activity: <span style="color:var(--muted)">${s.last_active ? new Date(s.last_active).toLocaleString() : 'Never'}</span></div></div>
         </div>
       </div>
 

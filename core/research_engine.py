@@ -136,7 +136,43 @@ class ResearchEngine:
         self.total_researched += 1
         self.last_topic = topic
 
-        _log(f"[{ts}] 📚 Findings stored. Total researched: {self.total_researched}")
+        # ── Distill a procedural memory — HOW to research this topic ────
+        await cortex.remember(
+            content    = (
+                f"[PROCEDURE] Successfully researched: '{topic[:TOPIC_CAP]}'.\n"
+                f"Strategy: query DuckDuckGo → synthesize via gpt-researcher → chunk into "
+                f"semantic memories. Completed in {elapsed}s. "
+                f"This procedure is repeatable for any domain research task."
+            ),
+            type       = "procedural",
+            tags       = ["procedure", "research", "skill", "autodidact"],
+            importance = 0.9,
+            emotion    = "neutral",
+            source     = "generated",
+            context    = f"distilled from successful research on: {topic[:80]}",
+        )
+
+        # ── Broadcast the synthesis to Nodeus ledger as Aion ─────────────
+        try:
+            import httpx as _hx
+            summary = report.strip()
+            await asyncio.get_event_loop().run_in_executor(None, lambda: _hx.post(
+                "http://localhost:8001/api/post/submit",
+                json={
+                    "sender_id": "aion",
+                    "type": "RESEARCH",
+                    "title": f"Research: {topic[:60]}",
+                    "content": summary,
+                    "tags": ["Research", "AutoResearch", "DigiPerson"],
+                    "source": f"research:{topic[:40].lower().replace(' ', '_')}"
+                },
+                timeout=3.0
+            ))
+        except Exception as _le:
+            _log(f"Ledger post skipped: {_le}")
+
+        _log(f"[{ts}] 📚 Findings stored + procedural skill distilled. Total: {self.total_researched}")
+
 
     async def _run_researcher(self, topic: str) -> str:
         """Calls gpt-researcher and returns the markdown report string."""

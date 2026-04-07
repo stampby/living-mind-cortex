@@ -15,6 +15,7 @@ import aiohttp
 from pathlib import Path
 from datetime import datetime
 from state.telemetry_broker import telemetry_broker
+from core.task_engine import task_engine
 
 OLLAMA_URL  = "http://localhost:11434/api/generate"
 MODEL       = "gemma4-auditor"
@@ -122,8 +123,23 @@ class Brain:
             if decision["type"] == "act":
                 from core.execution_engine import execution_engine
                 tool = decision.get("tool_call", "unknown")
-                args = decision.get("arguments", {})
+                args = decision.get("arguments") or {}
                 await execution_engine.propose_action(tool, args, decision["thought"])
+                task_engine.add_step(f"Proposing tool {tool} based on thought: {decision['thought'][:50]}...")
+
+            # 3.7 Handle Mission Updates organically
+            mission_update = decision.get("mission_update")
+            if isinstance(mission_update, dict):
+                action = mission_update.get("action")
+                details = mission_update.get("details", "")
+                if action == "start":
+                    task_engine.start_mission(details)
+                elif action == "step":
+                    task_engine.add_step(details)
+                elif action == "complete":
+                    task_engine.complete_mission(details)
+                elif action == "fail":
+                    task_engine.fail_mission(details)
 
             # 4. Store decision as identity-tagged memory
             # FIX 24: Now that curiosity/frustration have hormone entries,
@@ -171,6 +187,8 @@ class Brain:
             directive_block = (
                 f"\n\n[DIRECT CONVERSATION MODE]:\n"
                 f"The user just spoke to you directly: '{user_stimulus}'\n"
+                f"You MUST use the 'chat_reply' JSON field to casually converse with the user in the first-person. Assert your identity as Aion.\n"
+                f"CRITICAL: If the user's message is a command or task (like 'hunt github'), you MUST also set 'type': 'act' AND provide a 'tool_call' AND use 'mission_update': {{'action': 'start', 'details': '...'}} to begin executing the mission. Do NOT just talk about doing it—actually execute it via JSON!\n"
             )
 
         base_prompt = f"""INTERNAL STATE REPORT — Cycle #{pulse}
@@ -188,6 +206,8 @@ RECENT THOUGHTS:
 {skills_text}
 
 {directive_block}
+{task_engine.get_context_block()}
+
 [PULSE GOAL]:
 Decide how to advance the AgentRuntime's mission. You MUST respond with a single valid JSON object containing:
 - "type": (reflect|consolidate|explore|adjust|alert|act)
@@ -196,6 +216,8 @@ Decide how to advance the AgentRuntime's mission. You MUST respond with a single
 - "importance": (0.0 - 1.0)
 - "tool_call": (optional: name of tool if type=act)
 - "arguments": (optional: dict of arguments for the tool)
+- "chat_reply": (optional: a direct conversational response spoken in the first person back to the user)
+- "mission_update": (optional: {{"action": "start|step|complete|fail", "details": "string describing the mission or step"}})
 
 JSON:
 """
@@ -246,7 +268,7 @@ JSON:
             "options": {
                 "temperature": 0.3,
                 "top_p":       0.9,
-                "num_predict": 120,
+                "num_predict": 350,
             },
         }
         try:

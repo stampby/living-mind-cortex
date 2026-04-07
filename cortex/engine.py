@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 from datetime import datetime
 
-DATABASE_URL = "postgresql://frost@/living_mind?host=/var/run/postgresql"
+DATABASE_URL = "postgresql://user@/living_mind?host=/var/run/postgresql"
 
 # Emotional encoding boosts (importance multipliers)
 EMOTION_BOOSTS = {
