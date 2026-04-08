@@ -65,6 +65,27 @@
                 </div>
 
             </aside>
+
+            <!-- Right Sidebar for Sovereign Agents -->
+            <aside class="sidebar right-sidebar">
+                
+                <!-- Agent Registry Block -->
+                <div class="glass-panel">
+                    <div class="panel-header" style="color: var(--accent-blue);">Sovereign Agents</div>
+                    <div id="agents-container" style="display:flex; flex-direction:column; gap:0.75rem; overflow-y:auto; max-height: 400px;">
+                        <div class="log-entry" style="text-align: center;">Loading agents...</div>
+                    </div>
+                </div>
+
+                <!-- Multi-Agent Bus Block -->
+                <div class="glass-panel" style="margin-top: 1rem;">
+                    <div class="panel-header" style="color: var(--accent-gold);">Multi-Agent Bus (HTP)</div>
+                    <div id="bus-peers-container" style="display:flex; flex-direction:column; gap:0.75rem; overflow-y:auto; max-height: 200px;">
+                        <div class="log-entry" style="text-align: center;">Searching for peers...</div>
+                    </div>
+                </div>
+
+            </aside>
         </main>
 
         <!-- Center Bottom: Pill Monologue -->
@@ -211,6 +232,73 @@
                 if(window.pulseNode) window.pulseNode("Malkhut", 2.0);
             }
         });
+
+        // ── Sovereign Agents & Bus Polling ──────────────────────────────────
+        
+        function renderHeatBar(temp) {
+            const width = 16;
+            const ratio = Math.min(temp / 500.0, 1.0);
+            const filled = Math.floor(ratio * width);
+            const bar = "█".repeat(filled) + "░".repeat(width - filled);
+            const color = temp > 300 ? "var(--accent-red)" : (temp > 100 ? "var(--accent-gold)" : "var(--text-muted)");
+            return `<span style="color: ${color}; font-family: 'JetBrains Mono', monospace;">${bar} ${temp.toFixed(1)}K</span>`;
+        }
+
+        async function fetchAgentsAndPeers() {
+            try {
+                // Fetch Agents
+                const agentRes = await fetch('/agents');
+                if (agentRes.ok) {
+                    const agents = await agentRes.json();
+                    const container = document.getElementById('agents-container');
+                    if (agents.length === 0) {
+                        container.innerHTML = `<div class="log-entry" style="text-align: center;">No agents registered.</div>`;
+                    } else {
+                        container.innerHTML = agents.sort((a,b) => a.name.localeCompare(b.name)).map(a => {
+                            const statusColor = a.status === 'deployed' ? 'var(--accent-blue)' : (a.status === 'sublimated' ? 'var(--accent-gold)' : 'var(--text-muted)');
+                            return `
+                                <div class="agent-card">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.25rem;">
+                                        <div style="font-weight: 600; font-size: 0.85rem;"><span style="color:${statusColor}; margin-right:4px;">●</span>${a.name}</div>
+                                        <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">${a.status}</div>
+                                    </div>
+                                    <div style="font-size: 0.7rem; color: #888; margin-bottom: 0.5rem;">${a.lora_adapter} | ${a.skill}</div>
+                                    <div style="font-size: 0.75rem;">${renderHeatBar(a.plasma_temp)}</div>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                }
+
+                // Fetch Peers
+                const peerRes = await fetch('/bus/peers');
+                if (peerRes.ok) {
+                    const peers = await peerRes.json();
+                    const bContainer = document.getElementById('bus-peers-container');
+                    if (peers.length === 0) {
+                        bContainer.innerHTML = `<div class="log-entry" style="text-align: center;">No peers explicitly connected.</div>`;
+                    } else {
+                        bContainer.innerHTML = peers.map(p => {
+                            const pColor = p.status === 'active' ? '#10b981' : 'var(--accent-red)';
+                            return `
+                                <div class="agent-card">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.25rem;">
+                                        <div style="font-weight: 600; font-size: 0.85rem;"><span style="color:${pColor}; margin-right:4px;">●</span>${p.name || 'Peer'}</div>
+                                        <div style="font-size: 0.7rem; color: var(--text-muted);">${p.status}</div>
+                                    </div>
+                                    <div style="font-size: 0.7rem; color: #888; overflow:hidden; text-overflow:ellipsis;">${p.url}</div>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                }
+            } catch (e) {
+                console.error("Agent fetch err:", e);
+            }
+        }
+
+        setInterval(fetchAgentsAndPeers, 2000);
+        fetchAgentsAndPeers(); // initial call
     </script>
 </body>
 </html>
