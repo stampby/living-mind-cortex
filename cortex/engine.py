@@ -141,6 +141,7 @@ class Cortex:
         _thermal_substrate.inject(
             content     = content[:120],
             temperature = thermal_temp,
+            anchor_temperature = thermal_temp if type == "identity" else 0.0,
             tags        = tags + [type, emotion],
         )
 

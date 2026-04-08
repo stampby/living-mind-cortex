@@ -69,6 +69,7 @@ class ConceptNode:
     id:           str
     content:      str
     temperature:  float         = 0.5    # [0 → ∞), ambient = 0.05
+    anchor_temperature: float   = 0.0    # floor temp: 0.0 = normal decay, >0 = pinned
     state:        str           = "molten"  # molten | crystallizing | crystallized | boiling
     tags:         List[str]     = field(default_factory=list)
     edges:        List[str]     = field(default_factory=list)  # neighbor node IDs
@@ -97,10 +98,10 @@ class ConceptNode:
         """Passive radiation — lose heat each tick toward ambient."""
         if self.immutable:
             return
-        self.temperature = max(
-            AMBIENT_TEMPERATURE,
-            self.temperature * rate
-        )
+            
+        floor = self.anchor_temperature if self.anchor_temperature > 0.0 else AMBIENT_TEMPERATURE
+        self.temperature = max(floor, self.temperature * rate)
+        
         if self.temperature < FREEZE_TEMP:
             self.cool_ticks += 1
         else:
@@ -220,6 +221,7 @@ class ThermorphicSubstrate:
         self,
         content:     str,
         temperature: float      = 0.8,
+        anchor_temperature: float = 0.0,
         tags:        List[str]  = None,
         edges_to:    List[str]  = None,
         dims:        int        = 64,   # reduced dims for demo; use 256+ in production
@@ -232,6 +234,7 @@ class ThermorphicSubstrate:
             id          = str(uuid.uuid4())[:8],
             content     = content,
             temperature = temperature,
+            anchor_temperature = anchor_temperature,
             tags        = tags or [],
             edges       = edges_to or [],
             hvec        = _random_hvec(dims),
