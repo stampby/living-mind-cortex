@@ -73,7 +73,14 @@ class MetacognitionOverseer:
             r_stats = research_engine.stats()
             if r_stats.get("queue_depth", 0) > 0 or r_stats.get("total_completed", 0) > 0:
                 self._last_research_pulse = pulse_n
-        except Exception:
+        except AttributeError as e:
+            # stats() missing on the engine — programming error, not a runtime blip.
+            # Log once so it surfaces during development without spamming every 6 pulses.
+            if not getattr(self, '_research_stats_warned', False):
+                print(f"[META] ⚠️  research_engine.stats() unavailable: {e} — research starvation detection blind")
+                self._research_stats_warned = True
+        except Exception as e:
+            # Transient runtime error — stay silent, try again next pulse.
             pass
 
         drift_type = None
@@ -150,15 +157,22 @@ class MetacognitionOverseer:
 
         # Write self-reflection memory
         reflection = await self._self_reflect(drift_type)
-        await cortex.remember(
-            content    = f"[METACOGNITION] Drift detected: {drift_type}. {reflection}",
-            type       = "episodic",
-            tags       = ["metacognition", "self_aware", "drift_correction", drift_type],
-            importance = 0.7,
-            emotion    = "surprise",
-            source     = "experienced",
-            context    = f"pulse={pulse_n} drift_type={drift_type}",
-        )
+        try:
+            await cortex.remember(
+                content    = f"[METACOGNITION] Drift detected: {drift_type}. {reflection}",
+                type       = "episodic",
+                tags       = ["metacognition", "self_aware", "drift_correction", drift_type],
+                importance = 0.7,
+                emotion    = "surprise",
+                source     = "experienced",
+                context    = f"pulse={pulse_n} drift_type={drift_type}",
+            )
+        except Exception as mem_err:
+            # Non-fatal — hormone corrections already fired above.
+            # But an uncaught exception here would propagate to the runtime pulse loop
+            # and kill the next 6-pulse cycle, so we catch and log explicitly.
+            print(f"[META] ⚠️  Drift memory write failed ({drift_type}): "
+                  f"{type(mem_err).__name__}: {mem_err}")
 
         print(f"[{ts}] [META] ✅ Corrective action applied for {drift_type}")
 
@@ -197,8 +211,14 @@ class MetacognitionOverseer:
                 if resp.status == 200:
                     data = await resp.json()
                     return data.get("response", "").strip()[:200]
-        except Exception:
-            pass
+        except aiohttp.ClientConnectorError:
+            pass  # Ollama offline — fall through to deterministic fallback
+        except aiohttp.ServerTimeoutError:
+            pass  # Model too slow — deterministic fallback is faster anyway
+        except aiohttp.ClientError as e:
+            print(f"[META] LLM transient error during self-reflect: {type(e).__name__}: {e}")
+        except Exception as e:
+            print(f"[META] LLM unexpected error during self-reflect: {type(e).__name__}: {e}")
         # Fallback: deterministic reflection
         fallbacks = {
             "hormone_imbalance":   "Cortisol-dopamine imbalance suppressed executive function; dopamine boost unlocks action pathways.",
