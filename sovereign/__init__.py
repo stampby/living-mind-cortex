@@ -37,6 +37,7 @@ class SovereignHeartbeat:
         cortex,
         tick_rate_seconds: int = 60,
         idle_threshold_seconds: int = 3600,
+        bus=None,   # Optional AgentBus — injected to avoid circular imports
     ):
         self.substrate            = substrate
         self.cortex               = cortex
@@ -46,6 +47,7 @@ class SovereignHeartbeat:
         self.ticks                = 0
         self.rem_cycles           = 0
         self._running             = False
+        self._bus                 = bus   # AgentBus | None
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -99,6 +101,14 @@ class SovereignHeartbeat:
             idle_seconds = (datetime.now(timezone.utc) - self.last_io_timestamp).total_seconds()
             if idle_seconds > self.idle_threshold:
                 await self.trigger_rem_cycle()
+
+            # 4. Bus heartbeat — ping peers, mark unreachable, single reconnect
+            #    Runs on the same clock as the thermal tick. No second scheduler.
+            if self._bus is not None:
+                try:
+                    await self._bus.heartbeat()
+                except Exception as bus_err:
+                    logger.warning(f"[HEARTBEAT] Bus heartbeat error: {bus_err}")
 
         except Exception as e:
             logger.error(f"[HEARTBEAT] Tick error: {e}")

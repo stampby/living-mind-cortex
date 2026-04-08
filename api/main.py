@@ -34,6 +34,7 @@ heartbeat = SovereignHeartbeat(
     cortex=cortex,
     tick_rate_seconds=60,
     idle_threshold_seconds=3600,
+    bus=bus,   # Wired in — bus.heartbeat() runs on the same clock
 )
 
 import json
@@ -42,6 +43,16 @@ from cortex.htp import HolographicTransferProtocol
 
 # Initialize the HTP Singleton
 htp_listener = HolographicTransferProtocol(cortex_engine=cortex, hsm=_thermal_substrate.hsm)
+
+# Initialize the Agent Bus (HTTP signaling → HTP data, Postgres peer list)
+from sovereign.bus import AgentBus
+import os as _os
+_local_url = _os.environ.get("SOVEREIGN_LOCAL_URL", "http://localhost:8008")
+bus = AgentBus(
+    db_pool=cortex._pool,
+    local_url=_local_url,
+    htp=htp_listener,
+)
 
 async def signaling_listener():
     """
@@ -87,6 +98,7 @@ async def signaling_listener():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await runtime.birth()
+    await bus.ensure_schema()   # Apply bus_peers DDL if not already present
     
     # Ignite the autonomic nervous system — runs alongside the runtime pulse
     pulse_task     = asyncio.create_task(heartbeat.start())
@@ -106,11 +118,11 @@ async def lifespan(app: FastAPI):
     pulse_task.cancel()
     signaling_task.cancel()
     lifecycle_task.cancel()
-    
-    # Explicitly close the WebRTC peer connection to prevent port hanging
+
     if htp_listener.pc:
         await htp_listener.pc.close()
-        
+
+    await bus.close()   # Close shared httpx client
     await asyncio.gather(pulse_task, signaling_task, lifecycle_task, return_exceptions=True)
     await runtime.death()
     print("[Sovereign] Cortex safely hibernated.")
@@ -251,6 +263,28 @@ async def reload_agents():
     """Hot-reload agent registry — picks up new/modified .agent.yaml files."""
     agents = _agent_registry.reload()
     return {"reloaded": len(agents), "agents": [a.name for a in agents]}
+
+
+# ── Bus endpoints ──────────────────────────────────────────────────────────────
+
+@app.get("/bus/peers")
+async def bus_peers():
+    """List all known P2P peers with status and last_seen."""
+    return await bus.peers()
+
+
+class BusConnectRequest(BaseModel):
+    peer_url: str
+    peer_name: str = ""
+
+@app.post("/bus/connect")
+async def bus_connect(req: BusConnectRequest):
+    """
+    Initiate a P2P connection to a remote Cortex node.
+    Always reattempts — idempotent by upsert on the bus_peers table.
+    """
+    success = await bus.connect(req.peer_url, req.peer_name)
+    return {"connected": success, "peer_url": req.peer_url}
 
 
 # ------------------------------------------------------------------------------
