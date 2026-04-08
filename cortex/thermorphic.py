@@ -230,6 +230,8 @@ class ThermorphicSubstrate:
         self.total_crystals: int                   = 0
         self._heat_injections: List[Tuple[str, float, str]] = []  # queued heat events
         self.SAFE_MUTATION_GAP = self._calculate_safe_mutation_gap()
+        from cortex.hologram import HolographicSuperposition
+        self.hsm = HolographicSuperposition(dims=256)
 
     def _calculate_safe_mutation_gap(self) -> int:
         """Dynamically compute system collision constant based on decay physics."""
@@ -308,6 +310,11 @@ class ThermorphicSubstrate:
           4. Crystallize  — sufficiently cold nodes lock into long-term memory
         """
         self.pulse_count += 1
+        
+        # HSM: Superimpose the current hot path
+        hot_nodes = {nid: n for nid, n in self.nodes.items() if n.temperature > FREEZE_TEMP}
+        self.hsm.update(hot_nodes)
+        
         events = {
             "pulse":      self.pulse_count,
             "diffusions": 0,

@@ -166,36 +166,78 @@ class Cortex:
         memory_type: str = None,
         tag: str = None
     ) -> list[Memory]:
-        where_clause = "WHERE (content % $1 OR $1 = '') AND importance >= $2"
-        args = [query, min_importance, limit]
-
-        if memory_type:
-            where_clause += " AND type = $" + str(len(args) + 1)
-            args.append(memory_type)
-
-        if tag:
-            where_clause += " AND $" + str(len(args) + 1) + " = ANY(tags)"
-            args.append(tag)
-
-        sql = f"""
-            SELECT id, content, type, tags, importance, created_at,
-                   last_accessed, access_count, emotion, confidence,
-                   context, source, linked_ids, metadata,
-                   is_flashbulb, is_identity,
-                   similarity(content, $1) AS sim
-            FROM memories
-            {where_clause}
-            ORDER BY sim DESC, importance DESC
-            LIMIT $3
-        """
-
         now = time.time()
         memories = []
+        
+        # ── 1. Holographic Superposition Memory (HSM) Primary Path ──────────
+        from cortex.thermorphic import encode_atom
+        query_hvec = encode_atom(query, dims=256)
+        candidate_phase = _thermal_substrate.hsm.unbind(query_hvec)
+        best_node, best_score = _thermal_substrate.hsm.decode_best_match(candidate_phase)
+        
+        # Track if HSM found something to avoid duplicating in TRGM
+        hsm_content_prefix = ""
+        
+        # Threshold must account for N-element interference: approx scaling is 1/sqrt(N_hot)
+        # We start with 0.45 as a conservative threshold for small sets of hot nodes.
+        if best_node and best_score > 0.45:
+            import logging
+            logging.getLogger("CortexEngine").info(
+                f"🔥 HSM Algebraic Hit (Score: {best_score:.3f}): {best_node.content[:60]}"
+            )
+            hsm_content_prefix = best_node.content[:100] + "%"
+            
+            # Fetch the associated node from DB
+            async with self._pool.acquire() as conn:
+                row = await conn.fetchrow("""
+                    SELECT id, content, type, tags, importance, created_at,
+                           last_accessed, access_count, emotion, confidence,
+                           context, source, linked_ids, metadata,
+                           is_flashbulb, is_identity,
+                           1.0 AS sim
+                    FROM memories
+                    WHERE content LIKE $1
+                    LIMIT 1
+                """, hsm_content_prefix)
+                if row:
+                    memories.append(self._row_to_memory(row))
+                    limit -= 1  # reduce limit for fallback
 
-        async with self._pool.acquire() as conn:
-            rows = await conn.fetch(sql, *args)
-            for row in rows:
-                memories.append(self._row_to_memory(row))
+        # ── 2. pg_trgm Fallback Path ──────────────────────────────────────────
+        
+        if limit > 0:
+            where_clause = "WHERE (content % $1 OR $1 = '') AND importance >= $2"
+            args = [query, min_importance, limit]
+
+            if memory_type:
+                where_clause += " AND type = $" + str(len(args) + 1)
+                args.append(memory_type)
+
+            if tag:
+                where_clause += " AND $" + str(len(args) + 1) + " = ANY(tags)"
+                args.append(tag)
+                
+            if hsm_content_prefix:
+                where_clause += " AND content NOT LIKE $" + str(len(args) + 1)
+                args.append(hsm_content_prefix)
+
+            sql = f"""
+                SELECT id, content, type, tags, importance, created_at,
+                       last_accessed, access_count, emotion, confidence,
+                       context, source, linked_ids, metadata,
+                       is_flashbulb, is_identity,
+                       similarity(content, $1) AS sim
+                FROM memories
+                {where_clause}
+                ORDER BY sim DESC, importance DESC
+                LIMIT $3
+            """
+            
+            async with self._pool.acquire() as conn:
+                rows = await conn.fetch(sql, *args)
+                for row in rows:
+                    memories.append(self._row_to_memory(row))
+
 
             # Batch reconsolidation: single UPDATE for all recalled rows
             if rows:
