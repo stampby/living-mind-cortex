@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sovereign AgentRuntime | Telemetry</title>
+    <!-- Modern Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <!-- 3D Physics Canvas -->
+    <div id="tree-container"></div>
+
+    <!-- UI Overlay Layer -->
+    <div class="app-container">
+        
+        <!-- Top Absolute Vitals -->
+        <header class="top-bar">
+            <div class="brand">
+                <div class="dot"></div>
+                LIVING MIND ARCHITECTURE
+            </div>
+            
+            <div class="vitals-row">
+                <div class="vital"><span class="label">Pulse</span><span class="val" id="val-pulse">0</span></div>
+                <div class="vital"><span class="label">Uptime</span><span class="val" id="val-uptime">0s</span></div>
+                <div class="vital"><span class="label">Awakenings</span><span class="val" id="val-awaken">0</span></div>
+                <div class="vital"><span class="label">Dreams</span><span class="val" id="val-dreams">0</span></div>
+                <div class="vital" style="margin-left: 2rem;"><span class="label">Quarantined</span><span class="val bad" id="val-fail">0</span></div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Left Sidebar -->
+            <aside class="sidebar">
+                
+                <!-- Census Block -->
+                <div class="glass-panel">
+                    <div class="panel-header">Organ Census</div>
+                    <div class="stats-grid">
+                        <div class="vital"><span class="label">ORGANS</span><span class="val" id="val-reg">13</span></div>
+                        <div class="vital"><span class="label">LOGIC GATES</span><span class="val" id="val-load">0</span></div>
+                        <div class="vital"><span class="label">Decisions</span><span class="val" id="val-dec">0</span></div>
+                        <div class="vital"><span class="label">Memories</span><span class="val" id="val-exec">0</span></div>
+                    </div>
+                </div>
+
+                <!-- Event Log Block -->
+                <div class="glass-panel" style="flex: 1; display:flex; flex-direction:column;">
+                    <div class="panel-header">Event Log</div>
+                    <div class="event-log-container" id="events-log">
+                        <div class="log-entry" id="log-waiting">Waiting for socket...</div>
+                    </div>
+                </div>
+
+                <!-- Malkhut Interactive Input -->
+                <div class="glass-panel" style="padding: 1rem;">
+                    <div class="panel-header" style="margin-bottom: 0.5rem;">Stimulus Bus</div>
+                    <input type="text" id="malkhut-input" placeholder="Inject command sequence..." autocomplete="off">
+                </div>
+
+            </aside>
+
+            <!-- Right Sidebar for Sovereign Agents -->
+            <aside class="sidebar right-sidebar">
+                
+                <!-- Agent Registry Block -->
+                <div class="glass-panel">
+                    <div class="panel-header" style="color: var(--accent-blue);">Sovereign Agents</div>
+                    <div id="agents-container" style="display:flex; flex-direction:column; gap:0.75rem; overflow-y:auto; max-height: 400px;">
+                        <div class="log-entry" style="text-align: center;">Loading agents...</div>
+                    </div>
+                </div>
+
+                <!-- Multi-Agent Bus Block -->
+                <div class="glass-panel" style="margin-top: 1rem;">
+                    <div class="panel-header" style="color: var(--accent-gold);">Multi-Agent Bus (HTP)</div>
+                    <div id="bus-peers-container" style="display:flex; flex-direction:column; gap:0.75rem; overflow-y:auto; max-height: 200px;">
+                        <div class="log-entry" style="text-align: center;">Searching for peers...</div>
+                    </div>
+                </div>
+
+            </aside>
+        </main>
+
+        <!-- Center Bottom: Pill Monologue -->
+        <div class="thought-stream-container">
+            <div class="glass-panel">
+                <span class="icon">🧠</span>
+                <span class="thought-text" id="thought-content">Awaiting cognitive ignition...</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Node Modal (Absolute Center) -->
+    <div id="node-modal">
+        <div class="modal-header">
+            <span id="modal-title">Node Name</span>
+            <span class="close-btn" onclick="document.getElementById('node-modal').style.display='none'">✕</span>
+        </div>
+        <div class="modal-content" id="modal-body">
+            <!-- stats injected here -->
+        </div>
+        <button class="modal-action-btn" id="modal-action-btn">Deliver Shock</button>
+    </div>
+
+    <!-- Logic Hooks -->
+    <script src="tree.js"></script>
+    <script>
+        const eventsLog = document.getElementById('events-log');
+        const inputField = document.getElementById('malkhut-input');
+        let initialTime = Date.now();
+
+        if(!window.wsPulse) {
+            window.wsPulse = new WebSocket('ws://' + location.host + '/ws/pulse');
+            window.wsPulse.onopen = () => logEvent("Connected to Sovereign Core");
+            window.wsPulse.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+                if (msg.type === "pulse") updateHUD(msg.data);
+                if (msg.type === "event" && msg.event === "signal" && window.spawnSignalParticle) {
+                    const d = JSON.parse(msg.message);
+                    window.spawnSignalParticle(d.source, d.target, Number(d.color.replace('#', '0x')));
+                }
+                if (msg.type === "event" && msg.event === "topology" && window.rebuildTopology) {
+                    window.lastTopologyData = JSON.parse(msg.message);
+                    window.rebuildTopology(window.lastTopologyData);
+                }
+                if (msg.type === "event" && msg.event === "function_fire" && window.fireFunctionSynapse) {
+                    const d = JSON.parse(msg.message);
+                    window.fireFunctionSynapse(d.organ, d.function);
+                    if (window.logEvent && Math.random() > 0.6) {
+                        window.logEvent(`[TRACE] Executed ${d.organ}.${d.function}()`);
+                    }
+                }
+            };
+        }
+
+        if(!window.wsStim) {
+            window.wsStim = new WebSocket('ws://' + location.host + '/ws/stimulus');
+        }
+
+        function formatUptime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return m > 0 ? `${m}m ${s}s` : `${s}s`;
+        }
+
+        function updateHUD(data) {
+            document.getElementById('val-pulse').textContent = data.event_loops || 0;
+            document.getElementById('val-uptime').textContent = formatUptime(data.uptime_s || 0);
+            
+            const mems = data.memory?.total || 0;
+            document.getElementById('val-exec').textContent = mems; 
+            
+            const brains = data.brain?.decisions_made || Math.floor((data.event_loops||0)/5);
+            document.getElementById('val-dec').textContent = brains;
+            
+            const errs = data.immune?.census?.filter(o => !o.healthy)?.length || 0;
+            document.getElementById('val-fail').textContent = errs;
+            
+            const regCount = data.immune?.census?.length || 0;
+            document.getElementById('val-reg').textContent = regCount;
+            
+            // Calculate active sub-node functions by scanning the Three.js Object Map or Topology Cache
+            let funcCount = 0;
+            if (window.lastTopologyData && window.lastTopologyData.nodes) {
+                window.lastTopologyData.nodes.forEach(n => {
+                    if (n.functions) funcCount += n.functions.length;
+                });
+            }
+            document.getElementById('val-load').textContent = funcCount;
+
+            if (data.dreams) document.getElementById('val-dreams').textContent = data.dreams.total_dreams || 0;
+            if (data.awakening) document.getElementById('val-awaken').textContent = data.awakening.total_meditations || 0;
+
+            const tC = document.getElementById('thought-content');
+            const bt = data.brain?.last_thought;
+            if (bt && tC.dataset.last !== bt) {
+                tC.dataset.last = bt;
+                // Typewriter effect
+                if (window.typewriterInterval) clearInterval(window.typewriterInterval);
+                tC.textContent = "> ";
+                let i = 0;
+                window.typewriterInterval = setInterval(() => {
+                    if (i < bt.length) {
+                        tC.textContent += bt.charAt(i);
+                        // Auto-scroll to bottom of the glass panel if needed
+                        const container = tC.closest('.glass-panel');
+                        if (container) container.scrollTop = container.scrollHeight;
+                        i++;
+                    } else {
+                        clearInterval(window.typewriterInterval);
+                    }
+                }, 20); // 20ms per character
+            }
+
+            if (data.topology && Object.keys(nodesMap).length === 0 && window.rebuildTopology) {
+                window.lastTopologyData = data.topology;
+                window.rebuildTopology(data.topology);
+            }
+
+            if (window.visualizePulse) window.visualizePulse(data);
+        }
+
+        window.logEvent = function(text) {
+            // Remove the static waiting message on first legitimate log
+            const waitingEl = document.getElementById("log-waiting");
+            if(waitingEl) waitingEl.remove();
+
+            const s = Math.floor((Date.now() - initialTime) / 1000);
+            const el = document.createElement("div");
+            el.className = "log-entry";
+            el.innerHTML = `<span class="ts">[${s}s]</span> ${text}`;
+            eventsLog.prepend(el);
+            if(eventsLog.children.length > 20) eventsLog.lastChild.remove();
+        }
+
+        inputField.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && inputField.value.trim() !== "") {
+                const text = inputField.value;
+                if(window.wsStim && window.wsStim.readyState === WebSocket.OPEN) {
+                    window.wsStim.send(JSON.stringify({ node: "malkhut", action: "stimulus", text: text }));
+                }
+                logEvent(`Tx: ${text}`);
+                inputField.value = "";
+                if(window.pulseNode) window.pulseNode("Malkhut", 2.0);
+            }
+        });
+
+        // ── Sovereign Agents & Bus Polling ──────────────────────────────────
+        
+        function renderHeatBar(temp) {
+            const width = 16;
+            const ratio = Math.min(temp / 500.0, 1.0);
+            const filled = Math.floor(ratio * width);
+            const bar = "█".repeat(filled) + "░".repeat(width - filled);
+            const color = temp > 300 ? "var(--accent-red)" : (temp > 100 ? "var(--accent-gold)" : "var(--text-muted)");
+            return `<span style="color: ${color}; font-family: 'JetBrains Mono', monospace;">${bar} ${temp.toFixed(1)}K</span>`;
+        }
+
+        async function fetchAgentsAndPeers() {
+            try {
+                // Fetch Agents
+                const agentRes = await fetch('/agents');
+                if (agentRes.ok) {
+                    const agents = await agentRes.json();
+                    const container = document.getElementById('agents-container');
+                    if (agents.length === 0) {
+                        container.innerHTML = `<div class="log-entry" style="text-align: center;">No agents registered.</div>`;
+                    } else {
+                        container.innerHTML = agents.sort((a,b) => a.name.localeCompare(b.name)).map(a => {
+                            const statusColor = a.status === 'deployed' ? 'var(--accent-blue)' : (a.status === 'sublimated' ? 'var(--accent-gold)' : 'var(--text-muted)');
+                            return `
+                                <div class="agent-card">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.25rem;">
+                                        <div style="font-weight: 600; font-size: 0.85rem;"><span style="color:${statusColor}; margin-right:4px;">●</span>${a.name}</div>
+                                        <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">${a.status}</div>
+                                    </div>
+                                    <div style="font-size: 0.7rem; color: #888; margin-bottom: 0.5rem;">${a.lora_adapter} | ${a.skill}</div>
+                                    <div style="font-size: 0.75rem;">${renderHeatBar(a.plasma_temp)}</div>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                }
+
+                // Fetch Peers
+                const peerRes = await fetch('/bus/peers');
+                if (peerRes.ok) {
+                    const peers = await peerRes.json();
+                    const bContainer = document.getElementById('bus-peers-container');
+                    if (peers.length === 0) {
+                        bContainer.innerHTML = `<div class="log-entry" style="text-align: center;">No peers explicitly connected.</div>`;
+                    } else {
+                        bContainer.innerHTML = peers.map(p => {
+                            const pColor = p.status === 'active' ? '#10b981' : 'var(--accent-red)';
+                            return `
+                                <div class="agent-card">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.25rem;">
+                                        <div style="font-weight: 600; font-size: 0.85rem;"><span style="color:${pColor}; margin-right:4px;">●</span>${p.name || 'Peer'}</div>
+                                        <div style="font-size: 0.7rem; color: var(--text-muted);">${p.status}</div>
+                                    </div>
+                                    <div style="font-size: 0.7rem; color: #888; overflow:hidden; text-overflow:ellipsis;">${p.url}</div>
+                                </div>
+                            `;
+                        }).join('');
+                    }
+                }
+            } catch (e) {
+                console.error("Agent fetch err:", e);
+            }
+        }
+
+        setInterval(fetchAgentsAndPeers, 2000);
+        fetchAgentsAndPeers(); // initial call
+    </script>
+</body>
+</html>

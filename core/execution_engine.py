@@ -107,6 +107,9 @@ class ExecutionEngine:
         msg = f"→ Motor Cortex executing autonomous tool `{tool}`: {cmd_display}"
         print(f"[EXECUTION] {msg}")
         
+        # Broadcast function_fire to the UI telemetry!
+        await manager.broadcast_event("function_fire", f"{tool}: {cmd_display}")
+        
         # In a fully sovereign test, we don't wait for human WS approval.
         # We spawn the tool async immediately since we trust the Sandbox.
         from cortex.engine import cortex
@@ -136,7 +139,7 @@ class ExecutionEngine:
         output = ""
         display_output = ""
         try:
-            if tool == "execute_bash":
+            if tool in ("execute_bash", "shell_exec"):
                 output, display_output = await self._tool_bash(args)
 
             elif tool == "read_file":

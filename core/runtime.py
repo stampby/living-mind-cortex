@@ -126,6 +126,7 @@ class AgentRuntime:
 
     async def death(self):
         self.is_alive = False
+        ts = datetime.now().strftime("%H:%M:%S")
         if self._task:
             self._task.cancel()
             try:
@@ -143,9 +144,28 @@ class AgentRuntime:
                 emotion    = "neutral",
                 source     = "experienced",
             )
-        await brain.close()
-        await dreams.close()
-        await awakening.close()
+        # Complete shutdown of all organs that maintain state/sessions
+        print(f"[{ts}] [DEATH] Cleaning up organ sessions...")
+        
+        # Collect all closeable organs. Many of these contain aiohttp.ClientSession
+        close_tasks = []
+        if hasattr(self, "evolver") and self.evolver:
+            close_tasks.append(self.evolver.close())
+            
+        # These are module-level singletons or instances from birth()
+        # Ensure we don't crash if something wasn't properly initialized
+        organs_to_close = [
+            brain, dreams, awakening, metacognition, 
+            topology_mapper, interoception, research_engine
+        ]
+        
+        for organ in organs_to_close:
+            if hasattr(organ, "close") and callable(organ.close):
+                close_tasks.append(organ.close())
+
+        if close_tasks:
+            await asyncio.gather(*close_tasks, return_exceptions=True)
+
         await cortex.disconnect()
         print(f"[DEATH] AgentRuntime dissolved after {self.event_loops} pulses.")
 

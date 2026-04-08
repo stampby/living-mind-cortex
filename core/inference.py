@@ -73,6 +73,42 @@ class SovereignInferenceClient:
         """Returns True if the adapter is currently resident in VRAM."""
         return adapter_id in self._loaded_adapters
 
+    async def sync_loaded_adapters(self) -> bool:
+        """
+        Queries the vLLM server (GET /v1/models) to synchronize the local 
+        _loaded_adapters set with the actual VRAM state.
+        
+        This prevents VRAM leaks when the Cortex process restarts but vLLM 
+        stays alive with adapters still resident.
+        """
+        print("[Inference] Synchronizing resident adapters with vLLM...")
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            try:
+                r = await client.get(f"{self.vllm_url}/models")
+                r.raise_for_status()
+                data = r.json()
+                
+                # models list contains both base model and LoRA adapters
+                current_models = [m["id"] for m in data.get("data", [])]
+                
+                # Filter out the base model to find LoRAs
+                found_loras = [
+                    m for m in current_models 
+                    if m != self.base_model_name and m != "base_model"
+                ]
+                
+                # Update local tracking
+                self._loaded_adapters = set(found_loras)
+                if found_loras:
+                    print(f"[Inference] Sync complete. Found {len(found_loras)} "
+                          f"resident adapter(s): {found_loras}")
+                else:
+                    print("[Inference] Sync complete. No resident LoRA adapters found.")
+                return True
+            except httpx.HTTPError as e:
+                print(f"[Inference Error] Failed to sync adapters: {e}")
+                return False
+
     # ── Generation ─────────────────────────────────────────────────────
 
     async def generate(self, prompt: str, adapter_id: str) -> str:

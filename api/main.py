@@ -3,10 +3,22 @@ Living Mind — API entry point
 FastAPI + lifespan that boots the runtime.
 """
 
+import os as _os
+import sys as _sys
+
+# sovereign-agents lives as a sibling repo. Add it to the path if not installed.
+_sovereign_path = _os.environ.get(
+    "SOVEREIGN_AGENTS_PATH",
+    _os.path.join(_os.path.dirname(__file__), "..", "..", "sovereign-agents"),
+)
+if _sovereign_path not in _sys.path:
+    _sys.path.insert(0, _sovereign_path)
+
 import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from core.runtime import runtime
 from api.events import manager
 from state.telemetry_broker import telemetry_broker
@@ -28,15 +40,6 @@ lifecycle_manager = AdapterLifecycleManager(
     poll_interval_seconds=60.0,
 )
 
-# ── Autonomic Heartbeat (shared singletons — same memory universe as recall()) ─
-heartbeat = SovereignHeartbeat(
-    substrate=_thermal_substrate,
-    cortex=cortex,
-    tick_rate_seconds=60,
-    idle_threshold_seconds=3600,
-    bus=bus,   # Wired in — bus.heartbeat() runs on the same clock
-)
-
 import json
 from aiortc import RTCSessionDescription
 from cortex.htp import HolographicTransferProtocol
@@ -49,9 +52,18 @@ from sovereign.bus import AgentBus
 import os as _os
 _local_url = _os.environ.get("SOVEREIGN_LOCAL_URL", "http://localhost:8008")
 bus = AgentBus(
-    db_pool=cortex._pool,
+    cortex_engine=cortex,
     local_url=_local_url,
     htp=htp_listener,
+)
+
+# ── Autonomic Heartbeat (shared singletons — same memory universe as recall()) ─
+heartbeat = SovereignHeartbeat(
+    substrate=_thermal_substrate,
+    cortex=cortex,
+    tick_rate_seconds=60,
+    idle_threshold_seconds=3600,
+    bus=bus,   # Wired in — bus.heartbeat() runs on the same clock
 )
 
 async def signaling_listener():
@@ -158,16 +170,6 @@ if os.path.exists(ui_path):
 # No subprocess spawning; logs are the FastAPI server logs (uvicorn stdout).
 # ------------------------------------------------------------------------------
 
-import sys as _sys
-import os as _os
-# sovereign-agents lives as a sibling repo. Add it to the path if not installed.
-_sovereign_path = _os.environ.get(
-    "SOVEREIGN_AGENTS_PATH",
-    _os.path.join(_os.path.dirname(__file__), "..", "..", "sovereign-agents"),
-)
-if _sovereign_path not in _sys.path:
-    _sys.path.insert(0, _sovereign_path)
-
 from sovereign.registry import AgentRegistry
 
 _agent_registry = AgentRegistry(
@@ -263,6 +265,56 @@ async def reload_agents():
     """Hot-reload agent registry — picks up new/modified .agent.yaml files."""
     agents = _agent_registry.reload()
     return {"reloaded": len(agents), "agents": [a.name for a in agents]}
+
+
+class AgentInvokeRequest(BaseModel):
+    prompt: str
+    target_agent: str | None = None
+    session_id: str | None = None
+
+@app.post("/agents/{name}/invoke")
+async def invoke_agent(name: str, req: AgentInvokeRequest):
+    """Deploy the target agent and push the prompt through the brain.think loop."""
+    try:
+        defn = _agent_registry.get(name)
+        _agent_registry.set_status(name, "deployed")
+        new_temp = router.heatsink.resonate(
+            f"agent:{name}",
+            data={"agent": name, "adapter": defn.lora_adapter},
+            friction_heat=defn.friction_heat,
+        )
+        _agent_registry.update_plasma_temp(name, new_temp)
+    except KeyError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"Agent '{name}' not found.")
+
+    text_input = f"[{name.upper()} DIRECTIVE] {req.prompt}" 
+
+    await cortex.remember(
+        content=f"[USER STIMULUS] {text_input}",
+        type="episodic", tags=["senses", "input"],
+        importance=0.9, emotion="surprise", source="experienced"
+    )
+    
+    from core.runtime import runtime
+    from core.orchestrator import brain as brain_inst
+    
+    # Directly invoke the Brain's ReAct agentic loop
+    decision = await brain_inst.think(runtime.event_loops, cortex, immune, user_stimulus=text_input, agent_def=defn)
+    
+    if decision:
+        reply = decision.get("chat_reply")
+        if reply:
+            return {"response": reply.strip()}
+        else:
+            import re as _re
+            thought = _re.sub(r'\[Simulation:.*?\]', '', decision.get("thought", ""), flags=_re.DOTALL).strip()
+            if thought:
+                return {"response": f"[Internal thought] {thought}"}
+            else:
+                return {"response": "(Action proposed.)"}
+    else:
+        return {"response": "(Neural lag — I could not form a cohesive thought.)"}
 
 
 # ── Bus endpoints ──────────────────────────────────────────────────────────────
@@ -575,6 +627,24 @@ async def websocket_stimulus(websocket: WebSocket):
             
             if node == "malkhut" and "text" in data:
                 text_input = data['text']
+                target_agent = data.get('target_agent')
+                
+                # If a specific agent is targeted (Workbench deployment), heat its plasma context
+                if target_agent:
+                    try:
+                        defn = _agent_registry.get(target_agent)
+                        _agent_registry.set_status(target_agent, "deployed")
+                        new_temp = router.heatsink.resonate(
+                            f"agent:{target_agent}",
+                            data={"agent": target_agent, "adapter": defn.lora_adapter},
+                            friction_heat=defn.friction_heat,
+                        )
+                        _agent_registry.update_plasma_temp(target_agent, new_temp)
+                        text_input = f"[{target_agent.upper()} DIRECTIVE] {text_input}" 
+                    except KeyError:
+                        await manager.broadcast_event("chat_reply", f"[Backend Error] Agent '{target_agent}' not found in registry.")
+                        continue
+
                 await cortex.remember(
                     content=f"[USER STIMULUS] {text_input}",
                     type="episodic", tags=["senses", "input"],

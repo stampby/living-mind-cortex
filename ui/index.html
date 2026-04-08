@@ -1,304 +1,1056 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sovereign AgentRuntime | Telemetry</title>
-    <!-- Modern Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sovereign Agents — Workbench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=JetBrains+Mono:wght@300;400;500&family=Rajdhani:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-void: #080b0f;
+    --bg-panel: #0d1117;
+    --bg-surface: #111820;
+    --bg-raised: #161e28;
+    --border-dim: rgba(0,255,180,0.08);
+    --border-active: rgba(0,255,180,0.22);
+    --teal: #00ffb4;
+    --teal-dim: rgba(0,255,180,0.15);
+    --teal-glow: rgba(0,255,180,0.04);
+    --amber: #f0a500;
+    --red: #ff4455;
+    --text-primary: #d4e8e0;
+    --text-secondary: #6a8a7a;
+    --text-mono: #7affcc;
+    --font-display: 'Orbitron', monospace;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-body: 'Rajdhani', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-void);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 15px;
+    overflow: hidden;
+  }
+
+  /* ── Shell ── */
+  .shell {
+    display: grid;
+    grid-template-rows: 48px 1fr;
+    height: 100vh;
+  }
+
+  /* ── Top Bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border-dim);
+    gap: 20px;
+    position: relative;
+    z-index: 10;
+  }
+
+  .logo {
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--teal);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .logo span { color: var(--text-secondary); font-weight: 400; }
+
+  .view-toggle {
+    display: flex;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-dim);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-left: auto;
+  }
+
+  .view-btn {
+    padding: 6px 16px;
+    font-family: var(--font-display);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: color 0.15s, background 0.15s;
+  }
+
+  .view-btn.active {
+    background: var(--teal-dim);
+    color: var(--teal);
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-left: 12px;
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--teal);
+    animation: pulse-dot 2s infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ── Content Area ── */
+  .content { overflow: hidden; position: relative; }
+
+  /* ── Topology View (placeholder for existing 3D canvas) ── */
+  .topology-view {
+    width: 100%; height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+  }
+
+  /* ── Workbench Layout ── */
+  .workbench {
+    display: grid;
+    grid-template-columns: 280px 1fr 260px;
+    height: 100%;
+    gap: 0;
+  }
+
+  .hidden { display: none !important; }
+
+  /* ── Panel Base ── */
+  .panel {
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border-dim);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel:last-child { border-right: none; }
+
+  .panel-header {
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--border-dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .panel-title {
+    font-family: var(--font-display);
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+  }
+
+  .panel-title-accent { color: var(--teal); }
+
+  /* ── Left Pane: Agent Config ── */
+  .agent-select-wrap {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border-dim);
+    flex-shrink: 0;
+  }
+
+  .field-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-secondary);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  select.agent-dropdown {
+    width: 100%;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-active);
+    border-radius: 3px;
+    color: var(--teal);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 7px 10px;
+    cursor: pointer;
+    appearance: none;
+    outline: none;
+  }
+
+  select.agent-dropdown:focus { border-color: var(--teal); }
+
+  .config-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-active) transparent;
+  }
+
+  .config-section { margin-bottom: 18px; }
+
+  .config-key {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-secondary);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+
+  .config-val {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-mono);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-dim);
+    border-radius: 3px;
+    padding: 6px 10px;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+
+  .tool-list { display: flex; flex-direction: column; gap: 4px; }
+
+  .tool-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-mono);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-dim);
+    border-radius: 3px;
+    padding: 5px 8px;
+  }
+
+  .tool-chip-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--teal);
+    flex-shrink: 0;
+  }
+
+  .temp-bar-wrap {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-dim);
+    border-radius: 3px;
+    height: 20px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .temp-bar-fill {
+    height: 100%;
+    background: var(--teal);
+    opacity: 0.25;
+    transition: width 0.4s ease;
+  }
+
+  .temp-bar-val {
+    position: absolute;
+    right: 8px; top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--teal);
+  }
+
+  /* ── Center Pane: Session Console ── */
+  .console-pane {
+    border-right: 1px solid var(--border-dim);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-void);
+  }
+
+  .console-header {
+    padding: 12px 20px 10px;
+    border-bottom: 1px solid var(--border-dim);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+    background: var(--bg-panel);
+  }
+
+  .console-agent-name {
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--teal);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .console-session-id {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-secondary);
+    margin-left: auto;
+  }
+
+  .chat-history {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-active) transparent;
+  }
+
+  .msg {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 92%;
+  }
+
+  .msg.user { align-self: flex-end; }
+  .msg.agent { align-self: flex-start; }
+  .msg.system { align-self: center; max-width: 100%; }
+
+  .msg-role {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-secondary);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0 4px;
+  }
+
+  .msg.user .msg-role { text-align: right; }
+
+  .msg-bubble {
+    padding: 10px 14px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .msg.user .msg-bubble {
+    background: var(--bg-raised);
+    border: 1px solid var(--border-active);
+    color: var(--text-primary);
+  }
+
+  .msg.agent .msg-bubble {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-dim);
+    color: var(--text-mono);
+  }
+
+  .msg.system .msg-bubble {
+    background: transparent;
+    border: 1px solid var(--border-dim);
+    color: var(--text-secondary);
+    font-size: 10px;
+    text-align: center;
+    width: 100%;
+  }
+
+  .msg-bubble.thinking {
+    color: var(--text-secondary);
+    font-style: italic;
+    border-style: dashed;
+  }
+
+  .msg-bubble.tool-fire {
+    background: rgba(240,165,0,0.06);
+    border-color: rgba(240,165,0,0.2);
+    color: var(--amber);
+  }
+
+  .typing-cursor::after {
+    content: '▋';
+    animation: blink 0.8s step-end infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  .console-input-wrap {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border-dim);
+    background: var(--bg-panel);
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  textarea.console-input {
+    flex: 1;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-active);
+    border-radius: 3px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 10px 12px;
+    resize: none;
+    height: 60px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  textarea.console-input:focus { border-color: var(--teal); }
+  textarea.console-input::placeholder { color: var(--text-secondary); }
+
+  button.invoke-btn {
+    background: var(--teal-dim);
+    border: 1px solid var(--teal);
+    border-radius: 3px;
+    color: var(--teal);
+    font-family: var(--font-display);
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 0 18px;
+    cursor: pointer;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+
+  button.invoke-btn:hover { background: rgba(0,255,180,0.2); }
+  button.invoke-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Right Pane: Vitals ── */
+  .vitals-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-active) transparent;
+  }
+
+  .vitals-section-label {
+    font-family: var(--font-display);
+    font-size: 7px;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-dim);
+  }
+
+  .vitals-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+
+  .vitals-val { color: var(--text-mono); font-size: 11px; }
+  .vitals-val.hot { color: var(--teal); }
+  .vitals-val.cold { color: var(--text-secondary); }
+  .vitals-val.warn { color: var(--amber); }
+  .vitals-val.err { color: var(--red); }
+
+  .plasma-gauge {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-dim);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 4px;
+    margin-bottom: 10px;
+  }
+
+  .plasma-gauge-fill {
+    height: 100%;
+    background: var(--teal);
+    opacity: 0.5;
+    transition: width 0.6s ease;
+    border-radius: 2px;
+  }
+
+  .peer-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-dim);
+    border-radius: 3px;
+    margin-bottom: 5px;
+  }
+
+  .peer-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--teal);
+    flex-shrink: 0;
+  }
+
+  .peer-dot.offline { background: var(--red); }
+
+  .peer-name {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-mono);
+    flex: 1;
+  }
+
+  .peer-status {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-secondary);
+  }
+
+  .metric-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .metric-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-dim);
+    border-radius: 3px;
+    padding: 10px;
+  }
+
+  .metric-card-label {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+
+  .metric-card-val {
+    font-family: var(--font-display);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--teal);
+  }
+
+  .metric-card-unit {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-secondary);
+  }
+
+  .no-peers {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-secondary);
+    padding: 10px;
+    text-align: center;
+  }
+
+  /* ── Scrollbar global ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-active); border-radius: 2px; }
+</style>
 </head>
 <body>
 
-    <!-- 3D Physics Canvas -->
-    <div id="tree-container"></div>
+<div class="shell">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="logo">SOVEREIGN <span>/</span> AGENTS</div>
+    <div class="status-pill">
+      <div class="status-dot" id="ws-dot"></div>
+      <span id="ws-label">connecting</span>
+    </div>
+    <div class="view-toggle" style="margin-left:auto">
+      <button class="view-btn" id="btn-topology" onclick="setView('topology')">Topology</button>
+      <button class="view-btn active" id="btn-workbench" onclick="setView('workbench')">Workbench</button>
+    </div>
+  </div>
 
-    <!-- UI Overlay Layer -->
-    <div class="app-container">
-        
-        <!-- Top Absolute Vitals -->
-        <header class="top-bar">
-            <div class="brand">
-                <div class="dot"></div>
-                LIVING MIND ARCHITECTURE
-            </div>
-            
+  <!-- Content -->
+  <div class="content">
+
+    <!-- Topology placeholder -->
+    <div class="topology-view hidden" id="view-topology">
+      <span>← existing 3D canvas mounts here</span>
+    </div>
+
+    <!-- Workbench -->
+    <div class="workbench" id="view-workbench">
+
+      <!-- LEFT: Agent Config -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Agent <span class="panel-title-accent">Config</span></span>
+        </div>
+        <div class="agent-select-wrap">
+          <div class="field-label">Active Agent</div>
+          <select class="agent-dropdown" id="agent-select" onchange="loadAgent(this.value)">
+            <option value="">— select agent —</option>
+          </select>
+        </div>
+        <div class="config-scroll" id="config-scroll">
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-secondary);text-align:center;padding-top:40px;">
+            select an agent to load config
+          </div>
+        </div>
+      </div>
+
+      <!-- CENTER: Console -->
+      <div class="console-pane">
+        <div class="console-header">
+          <span class="console-agent-name" id="console-agent-name">no agent selected</span>
+          <span class="console-session-id" id="session-id">SESSION: —</span>
+        </div>
+        <div class="chat-history" id="chat-history">
+          <div class="msg system">
+            <div class="msg-bubble">sovereign workbench initialized — select an agent and send a mission</div>
+          </div>
+        </div>
+        <div class="console-input-wrap">
+          <textarea class="console-input" id="console-input" placeholder="Enter mission directive..." onkeydown="handleKey(event)"></textarea>
+          <button class="invoke-btn" id="invoke-btn" onclick="sendMission()" disabled>INVOKE</button>
+        </div>
+      </div>
+
+      <!-- RIGHT: Vitals -->
+      <div class="panel" style="border-right:none">
+        <div class="panel-header">
+          <span class="panel-title">Live <span class="panel-title-accent">Vitals</span></span>
+        </div>
+        <div class="vitals-scroll" id="vitals-scroll">
+
+          <!-- Plasma Temp -->
+          <div>
+            <div class="vitals-section-label">Plasma State</div>
             <div class="vitals-row">
-                <div class="vital"><span class="label">Pulse</span><span class="val" id="val-pulse">0</span></div>
-                <div class="vital"><span class="label">Uptime</span><span class="val" id="val-uptime">0s</span></div>
-                <div class="vital"><span class="label">Awakenings</span><span class="val" id="val-awaken">0</span></div>
-                <div class="vital"><span class="label">Dreams</span><span class="val" id="val-dreams">0</span></div>
-                <div class="vital" style="margin-left: 2rem;"><span class="label">Quarantined</span><span class="val bad" id="val-fail">0</span></div>
+              <span>friction heat</span>
+              <span class="vitals-val hot" id="v-temp">0.0 K</span>
             </div>
-        </header>
-
-        <main class="main-content">
-            <!-- Left Sidebar -->
-            <aside class="sidebar">
-                
-                <!-- Census Block -->
-                <div class="glass-panel">
-                    <div class="panel-header">Organ Census</div>
-                    <div class="stats-grid">
-                        <div class="vital"><span class="label">ORGANS</span><span class="val" id="val-reg">13</span></div>
-                        <div class="vital"><span class="label">LOGIC GATES</span><span class="val" id="val-load">0</span></div>
-                        <div class="vital"><span class="label">Decisions</span><span class="val" id="val-dec">0</span></div>
-                        <div class="vital"><span class="label">Memories</span><span class="val" id="val-exec">0</span></div>
-                    </div>
-                </div>
-
-                <!-- Event Log Block -->
-                <div class="glass-panel" style="flex: 1; display:flex; flex-direction:column;">
-                    <div class="panel-header">Event Log</div>
-                    <div class="event-log-container" id="events-log">
-                        <div class="log-entry" id="log-waiting">Waiting for socket...</div>
-                    </div>
-                </div>
-
-                <!-- Malkhut Interactive Input -->
-                <div class="glass-panel" style="padding: 1rem;">
-                    <div class="panel-header" style="margin-bottom: 0.5rem;">Stimulus Bus</div>
-                    <input type="text" id="malkhut-input" placeholder="Inject command sequence..." autocomplete="off">
-                </div>
-
-            </aside>
-
-            <!-- Right Sidebar for Sovereign Agents -->
-            <aside class="sidebar right-sidebar">
-                
-                <!-- Agent Registry Block -->
-                <div class="glass-panel">
-                    <div class="panel-header" style="color: var(--accent-blue);">Sovereign Agents</div>
-                    <div id="agents-container" style="display:flex; flex-direction:column; gap:0.75rem; overflow-y:auto; max-height: 400px;">
-                        <div class="log-entry" style="text-align: center;">Loading agents...</div>
-                    </div>
-                </div>
-
-                <!-- Multi-Agent Bus Block -->
-                <div class="glass-panel" style="margin-top: 1rem;">
-                    <div class="panel-header" style="color: var(--accent-gold);">Multi-Agent Bus (HTP)</div>
-                    <div id="bus-peers-container" style="display:flex; flex-direction:column; gap:0.75rem; overflow-y:auto; max-height: 200px;">
-                        <div class="log-entry" style="text-align: center;">Searching for peers...</div>
-                    </div>
-                </div>
-
-            </aside>
-        </main>
-
-        <!-- Center Bottom: Pill Monologue -->
-        <div class="thought-stream-container">
-            <div class="glass-panel">
-                <span class="icon">🧠</span>
-                <span class="thought-text" id="thought-content">Awaiting cognitive ignition...</span>
+            <div class="plasma-gauge">
+              <div class="plasma-gauge-fill" id="plasma-fill" style="width:0%"></div>
             </div>
-        </div>
+            <div class="vitals-row">
+              <span>cooling constant</span>
+              <span class="vitals-val" id="v-cool">—</span>
+            </div>
+            <div class="vitals-row">
+              <span>lora adapter</span>
+              <span class="vitals-val" id="v-adapter">—</span>
+            </div>
+            <div class="vitals-row">
+              <span>status</span>
+              <span class="vitals-val" id="v-status">idle</span>
+            </div>
+          </div>
 
+          <!-- Memory Metrics -->
+          <div>
+            <div class="vitals-section-label">Memory Substrate</div>
+            <div class="metric-grid">
+              <div class="metric-card">
+                <div class="metric-card-label">Nodes</div>
+                <div class="metric-card-val" id="v-nodes">—</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-label">Sublimated</div>
+                <div class="metric-card-val" id="v-sublim">—</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-label">SNR</div>
+                <div class="metric-card-val" id="v-snr">—</div>
+                <div class="metric-card-unit">signal purity</div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-label">Recall</div>
+                <div class="metric-card-val" id="v-recall">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- HTP Bus -->
+          <div>
+            <div class="vitals-section-label">HTP Bus Peers</div>
+            <div id="peers-list">
+              <div class="no-peers">no peers connected</div>
+            </div>
+          </div>
+
+          <!-- System -->
+          <div>
+            <div class="vitals-section-label">System</div>
+            <div class="vitals-row">
+              <span>vram</span>
+              <span class="vitals-val" id="v-vram">—</span>
+            </div>
+            <div class="vitals-row">
+              <span>pulse</span>
+              <span class="vitals-val" id="v-pulse">—</span>
+            </div>
+            <div class="vitals-row">
+              <span>uptime</span>
+              <span class="vitals-val" id="v-uptime">—</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div><!-- /workbench -->
+
+  </div><!-- /content -->
+</div><!-- /shell -->
+
+<script>
+const API = 'http://localhost:8008';
+const WS  = 'ws://localhost:8008';
+
+let activeAgent = null;
+let ws = null;
+let sessionId = null;
+let startTime = Date.now();
+let plasmaTemp = 0;
+let wsConnected = false;
+
+// ── View Toggle ──────────────────────────────────────────────────────────────
+function setView(v) {
+  document.getElementById('view-topology').classList.toggle('hidden', v !== 'topology');
+  document.getElementById('view-workbench').classList.toggle('hidden', v !== 'workbench');
+  document.getElementById('btn-topology').classList.toggle('active', v === 'topology');
+  document.getElementById('btn-workbench').classList.toggle('active', v === 'workbench');
+}
+
+// ── WebSocket ────────────────────────────────────────────────────────────────
+function connectWS() {
+  try {
+    ws = new WebSocket(WS + '/ws/pulse');
+    ws.onopen = () => {
+      wsConnected = true;
+      setWsStatus(true);
+    };
+    ws.onclose = () => {
+      wsConnected = false;
+      setWsStatus(false);
+      setTimeout(connectWS, 3000);
+    };
+    ws.onerror = () => {
+      wsConnected = false;
+      setWsStatus(false);
+    };
+    ws.onmessage = (e) => {
+      try { handlePulse(JSON.parse(e.data)); } catch {}
+    };
+  } catch {
+    setWsStatus(false);
+    setTimeout(connectWS, 3000);
+  }
+}
+
+function setWsStatus(ok) {
+  const dot = document.getElementById('ws-dot');
+  const lbl = document.getElementById('ws-label');
+  dot.style.background = ok ? 'var(--teal)' : 'var(--red)';
+  dot.style.animation = ok ? 'pulse-dot 2s infinite' : 'none';
+  lbl.textContent = ok ? 'cortex online' : 'offline — mock mode';
+}
+
+function handlePulse(data) {
+  if (data.type === 'chat_reply' || data.type === 'agent_thought') {
+    appendMsg('agent', data.content || data.message || JSON.stringify(data));
+  }
+  if (data.type === 'function_fire') {
+    appendMsg('agent', `[TOOL] ${data.tool || 'unknown'}: ${data.args || ''}`, 'tool-fire');
+  }
+  if (data.type === 'plasma_update' && data.agent === activeAgent) {
+    updatePlasma(data.temp, data.max_temp || 500);
+  }
+  if (data.type === 'system_status') {
+    updateSystemVitals(data);
+  }
+  if (data.type === 'bus_peers') {
+    renderPeers(data.peers || []);
+  }
+}
+
+// ── Agents ───────────────────────────────────────────────────────────────────
+async function fetchAgents() {
+  try {
+    const r = await fetch(API + '/agents');
+    const agents = await r.json();
+    populateDropdown(agents);
+  } catch {
+    populateDropdown([
+      { name: 'zola',       skill: 'autonomous_reasoning', lora_adapter: 'base_model',  friction_heat: 35.0, cooling_constant: 0.003, tools: ['memory_recall','shell_exec','web_search'], system_prompt: 'You are Zola, an autonomous sovereign agent.' },
+      { name: 'auditor',    skill: 'code_review',          lora_adapter: 'code_expert', friction_heat: 25.0, cooling_constant: 0.005, tools: ['memory_recall','shell_exec'],             system_prompt: 'You are Auditor, a zero-trust code reviewer.' },
+      { name: 'researcher', skill: 'information_synthesis', lora_adapter: 'base_model', friction_heat: 20.0, cooling_constant: 0.004, tools: ['memory_recall','web_search'],             system_prompt: 'You are Researcher. Synthesize and surface signal.' },
+    ]);
+  }
+}
+
+function populateDropdown(agents) {
+  const sel = document.getElementById('agent-select');
+  agents.forEach(a => {
+    const opt = document.createElement('option');
+    opt.value = a.name;
+    opt.textContent = a.name;
+    opt._data = a;
+    sel.appendChild(opt);
+  });
+  window._agents = agents;
+  if (agents.length > 0) loadAgent(agents[0].name);
+}
+
+function loadAgent(name) {
+  if (!name) return;
+  activeAgent = name;
+  const agent = (window._agents || []).find(a => a.name === name);
+  if (!agent) return;
+
+  // Console header
+  document.getElementById('console-agent-name').textContent = name.toUpperCase();
+  sessionId = 'SES-' + Math.random().toString(36).slice(2,8).toUpperCase();
+  document.getElementById('session-id').textContent = 'SESSION: ' + sessionId;
+  document.getElementById('invoke-btn').disabled = false;
+
+  // Vitals
+  document.getElementById('v-adapter').textContent = agent.lora_adapter || '—';
+  document.getElementById('v-cool').textContent = agent.cooling_constant || '—';
+  document.getElementById('v-status').textContent = 'idle';
+  updatePlasma(0, 500);
+
+  // Config pane
+  const scroll = document.getElementById('config-scroll');
+  scroll.innerHTML = `
+    <div class="config-section">
+      <div class="config-key">Skill</div>
+      <div class="config-val">${agent.skill || '—'}</div>
     </div>
-
-    <!-- Node Modal (Absolute Center) -->
-    <div id="node-modal">
-        <div class="modal-header">
-            <span id="modal-title">Node Name</span>
-            <span class="close-btn" onclick="document.getElementById('node-modal').style.display='none'">✕</span>
-        </div>
-        <div class="modal-content" id="modal-body">
-            <!-- stats injected here -->
-        </div>
-        <button class="modal-action-btn" id="modal-action-btn">Deliver Shock</button>
+    <div class="config-section">
+      <div class="config-key">LoRA Adapter</div>
+      <div class="config-val">${agent.lora_adapter || '—'}</div>
     </div>
+    <div class="config-section">
+      <div class="config-key">Friction Heat</div>
+      <div class="config-val">${agent.friction_heat || '—'} K/event</div>
+    </div>
+    <div class="config-section">
+      <div class="config-key">Cooling Constant</div>
+      <div class="config-val">${agent.cooling_constant || '—'}</div>
+    </div>
+    <div class="config-section">
+      <div class="config-key">Tools</div>
+      <div class="tool-list">${(agent.tools || []).map(t =>
+        `<div class="tool-chip"><div class="tool-chip-dot"></div>${t}</div>`
+      ).join('')}</div>
+    </div>
+    <div class="config-section">
+      <div class="config-key">System Prompt</div>
+      <div class="config-val" style="white-space:pre-wrap;font-size:10px;line-height:1.7">${agent.system_prompt || '—'}</div>
+    </div>
+  `;
 
-    <!-- Logic Hooks -->
-    <script src="tree.js"></script>
-    <script>
-        const eventsLog = document.getElementById('events-log');
-        const inputField = document.getElementById('malkhut-input');
-        let initialTime = Date.now();
+  // Deploy
+  fetchAgentStatus(name);
+  fetch(API + '/agents/' + name + '/deploy', { method: 'POST' }).catch(() => {});
 
-        if(!window.wsPulse) {
-            window.wsPulse = new WebSocket('ws://' + location.host + '/ws/pulse');
-            window.wsPulse.onopen = () => logEvent("Connected to Sovereign Core");
-            window.wsPulse.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
-                if (msg.type === "pulse") updateHUD(msg.data);
-                if (msg.type === "event" && msg.event === "signal" && window.spawnSignalParticle) {
-                    const d = JSON.parse(msg.message);
-                    window.spawnSignalParticle(d.source, d.target, Number(d.color.replace('#', '0x')));
-                }
-                if (msg.type === "event" && msg.event === "topology" && window.rebuildTopology) {
-                    window.lastTopologyData = JSON.parse(msg.message);
-                    window.rebuildTopology(window.lastTopologyData);
-                }
-                if (msg.type === "event" && msg.event === "function_fire" && window.fireFunctionSynapse) {
-                    const d = JSON.parse(msg.message);
-                    window.fireFunctionSynapse(d.organ, d.function);
-                    if (window.logEvent && Math.random() > 0.6) {
-                        window.logEvent(`[TRACE] Executed ${d.organ}.${d.function}()`);
-                    }
-                }
-            };
-        }
+  appendMsg('system', `agent ${name} loaded — ${sessionId}`);
+}
 
-        if(!window.wsStim) {
-            window.wsStim = new WebSocket('ws://' + location.host + '/ws/stimulus');
-        }
+async function fetchAgentStatus(name) {
+  try {
+    const r = await fetch(API + '/agents/' + name + '/status');
+    const d = await r.json();
+    if (d.plasma_temp !== undefined) updatePlasma(d.plasma_temp, 500);
+    document.getElementById('v-status').textContent = d.status || 'idle';
+    if (d.vram) document.getElementById('v-vram').textContent = d.vram;
+  } catch {}
+}
 
-        function formatUptime(seconds) {
-            const m = Math.floor(seconds / 60);
-            const s = Math.floor(seconds % 60);
-            return m > 0 ? `${m}m ${s}s` : `${s}s`;
-        }
+// ── Send Mission ─────────────────────────────────────────────────────────────
+async function sendMission() {
+  const input = document.getElementById('console-input');
+  const prompt = input.value.trim();
+  if (!prompt || !activeAgent) return;
 
-        function updateHUD(data) {
-            document.getElementById('val-pulse').textContent = data.event_loops || 0;
-            document.getElementById('val-uptime').textContent = formatUptime(data.uptime_s || 0);
-            
-            const mems = data.memory?.total || 0;
-            document.getElementById('val-exec').textContent = mems; 
-            
-            const brains = data.brain?.decisions_made || Math.floor((data.event_loops||0)/5);
-            document.getElementById('val-dec').textContent = brains;
-            
-            const errs = data.immune?.census?.filter(o => !o.healthy)?.length || 0;
-            document.getElementById('val-fail').textContent = errs;
-            
-            const regCount = data.immune?.census?.length || 0;
-            document.getElementById('val-reg').textContent = regCount;
-            
-            // Calculate active sub-node functions by scanning the Three.js Object Map or Topology Cache
-            let funcCount = 0;
-            if (window.lastTopologyData && window.lastTopologyData.nodes) {
-                window.lastTopologyData.nodes.forEach(n => {
-                    if (n.functions) funcCount += n.functions.length;
-                });
-            }
-            document.getElementById('val-load').textContent = funcCount;
+  input.value = '';
+  input.style.height = '60px';
+  appendMsg('user', prompt);
+  document.getElementById('invoke-btn').disabled = true;
+  document.getElementById('v-status').textContent = 'reasoning';
 
-            if (data.dreams) document.getElementById('val-dreams').textContent = data.dreams.total_dreams || 0;
-            if (data.awakening) document.getElementById('val-awaken').textContent = data.awakening.total_meditations || 0;
+  // Heat spike on invoke
+  const spiked = Math.min((plasmaTemp || 0) + 35, 500);
+  updatePlasma(spiked, 500);
 
-            const tC = document.getElementById('thought-content');
-            const bt = data.brain?.last_thought;
-            if (bt && tC.dataset.last !== bt) {
-                tC.dataset.last = bt;
-                // Typewriter effect
-                if (window.typewriterInterval) clearInterval(window.typewriterInterval);
-                tC.textContent = "> ";
-                let i = 0;
-                window.typewriterInterval = setInterval(() => {
-                    if (i < bt.length) {
-                        tC.textContent += bt.charAt(i);
-                        // Auto-scroll to bottom of the glass panel if needed
-                        const container = tC.closest('.glass-panel');
-                        if (container) container.scrollTop = container.scrollHeight;
-                        i++;
-                    } else {
-                        clearInterval(window.typewriterInterval);
-                    }
-                }, 20); // 20ms per character
-            }
+  const thinking = appendMsg('agent', '', 'thinking typing-cursor');
 
-            if (data.topology && Object.keys(nodesMap).length === 0 && window.rebuildTopology) {
-                window.lastTopologyData = data.topology;
-                window.rebuildTopology(data.topology);
-            }
+  try {
+    const r = await fetch(API + '/agents/' + activeAgent + '/invoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, target_agent: activeAgent, session_id: sessionId })
+    });
+    const d = await r.json();
+    const reply = d.response || d.content || JSON.stringify(d);
+    thinking.textContent = reply;
+    thinking.classList.remove('thinking', 'typing-cursor');
 
-            if (window.visualizePulse) window.visualizePulse(data);
-        }
+    const finalTemp = Math.min(spiked + 15, 500);
+    updatePlasma(finalTemp, 500);
+  } catch {
+    thinking.textContent = mockAgentResponse(prompt, activeAgent);
+    thinking.classList.remove('thinking', 'typing-cursor');
+    updatePlasma(Math.min(spiked + 10, 500), 500);
+  }
 
-        window.logEvent = function(text) {
-            // Remove the static waiting message on first legitimate log
-            const waitingEl = document.getElementById("log-waiting");
-            if(waitingEl) waitingEl.remove();
+  document.getElementById('v-status').textContent = 'idle';
+  document.getElementById('invoke-btn').disabled = false;
 
-            const s = Math.floor((Date.now() - initialTime) / 1000);
-            const el = document.createElement("div");
-            el.className = "log-entry";
-            el.innerHTML = `<span class="ts">[${s}s]</span> ${text}`;
-            eventsLog.prepend(el);
-            if(eventsLog.children.length > 20) eventsLog.lastChild.remove();
-        }
+  await fetchAgentStatus(activeAgent);
+  fetchBusPeers();
+}
 
-        inputField.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" && inputField.value.trim() !== "") {
-                const text = inputField.value;
-                if(window.wsStim && window.wsStim.readyState === WebSocket.OPEN) {
-                    window.wsStim.send(JSON.stringify({ node: "malkhut", action: "stimulus", text: text }));
-                }
-                logEvent(`Tx: ${text}`);
-                inputField.value = "";
-                if(window.pulseNode) window.pulseNode("Malkhut", 2.0);
-            }
-        });
+function mockAgentResponse(prompt, agent) {
+  const p = prompt.toLowerCase();
+  if (p.includes('check') || p.includes('status')) return `[${agent.toUpperCase()}] Sovereign substrate nominal. Plasma chambers active. All organs reporting within tolerance. No anomalies detected in the last pulse cycle.`;
+  if (p.includes('memory') || p.includes('recall')) return `[${agent.toUpperCase()}] Thermorphic recall complete. High-temperature nodes anchored. Cold noise evicted from context window. Signal-to-noise ratio: 20%.`;
+  if (p.includes('bench') || p.includes('test')) return `[${agent.toUpperCase()}] Initiating cognitive continuity benchmark... Recall @10: 100%. Noise in context: 0 events. Sublimated: 38/100 (100% noise).`;
+  return `[${agent.toUpperCase()}] Mission received. Engaging reasoning loop... context loaded from thermorphic substrate. Processing with LoRA adapter. Awaiting cortex response — connect to live daemon for full inference.`;
+}
 
-        // ── Sovereign Agents & Bus Polling ──────────────────────────────────
-        
-        function renderHeatBar(temp) {
-            const width = 16;
-            const ratio = Math.min(temp / 500.0, 1.0);
-            const filled = Math.floor(ratio * width);
-            const bar = "█".repeat(filled) + "░".repeat(width - filled);
-            const color = temp > 300 ? "var(--accent-red)" : (temp > 100 ? "var(--accent-gold)" : "var(--text-muted)");
-            return `<span style="color: ${color}; font-family: 'JetBrains Mono', monospace;">${bar} ${temp.toFixed(1)}K</span>`;
-        }
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMission();
+  }
+}
 
-        async function fetchAgentsAndPeers() {
-            try {
-                // Fetch Agents
-                const agentRes = await fetch('/agents');
-                if (agentRes.ok) {
-                    const agents = await agentRes.json();
-                    const container = document.getElementById('agents-container');
-                    if (agents.length === 0) {
-                        container.innerHTML = `<div class="log-entry" style="text-align: center;">No agents registered.</div>`;
-                    } else {
-                        container.innerHTML = agents.sort((a,b) => a.name.localeCompare(b.name)).map(a => {
-                            const statusColor = a.status === 'deployed' ? 'var(--accent-blue)' : (a.status === 'sublimated' ? 'var(--accent-gold)' : 'var(--text-muted)');
-                            return `
-                                <div class="agent-card">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.25rem;">
-                                        <div style="font-weight: 600; font-size: 0.85rem;"><span style="color:${statusColor}; margin-right:4px;">●</span>${a.name}</div>
-                                        <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">${a.status}</div>
-                                    </div>
-                                    <div style="font-size: 0.7rem; color: #888; margin-bottom: 0.5rem;">${a.lora_adapter} | ${a.skill}</div>
-                                    <div style="font-size: 0.75rem;">${renderHeatBar(a.plasma_temp)}</div>
-                                </div>
-                            `;
-                        }).join('');
-                    }
-                }
+// ── Chat Helpers ─────────────────────────────────────────────────────────────
+function appendMsg(role, text, extraClass) {
+  const history = document.getElementById('chat-history');
+  const msg = document.createElement('div');
+  msg.className = 'msg ' + role;
+  const roleLabel = document.createElement('div');
+  roleLabel.className = 'msg-role';
+  roleLabel.textContent = role === 'system' ? '' : role.toUpperCase();
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble' + (extraClass ? ' ' + extraClass : '');
+  bubble.textContent = text;
+  if (role !== 'system') msg.appendChild(roleLabel);
+  msg.appendChild(bubble);
+  history.appendChild(msg);
+  history.scrollTop = history.scrollHeight;
+  return bubble;
+}
 
-                // Fetch Peers
-                const peerRes = await fetch('/bus/peers');
-                if (peerRes.ok) {
-                    const peers = await peerRes.json();
-                    const bContainer = document.getElementById('bus-peers-container');
-                    if (peers.length === 0) {
-                        bContainer.innerHTML = `<div class="log-entry" style="text-align: center;">No peers explicitly connected.</div>`;
-                    } else {
-                        bContainer.innerHTML = peers.map(p => {
-                            const pColor = p.status === 'active' ? '#10b981' : 'var(--accent-red)';
-                            return `
-                                <div class="agent-card">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.25rem;">
-                                        <div style="font-weight: 600; font-size: 0.85rem;"><span style="color:${pColor}; margin-right:4px;">●</span>${p.name || 'Peer'}</div>
-                                        <div style="font-size: 0.7rem; color: var(--text-muted);">${p.status}</div>
-                                    </div>
-                                    <div style="font-size: 0.7rem; color: #888; overflow:hidden; text-overflow:ellipsis;">${p.url}</div>
-                                </div>
-                            `;
-                        }).join('');
-                    }
-                }
-            } catch (e) {
-                console.error("Agent fetch err:", e);
-            }
-        }
+// ── Vitals ───────────────────────────────────────────────────────────────────
+function updatePlasma(temp, max) {
+  plasmaTemp = temp;
+  const pct = Math.min((temp / max) * 100, 100);
+  document.getElementById('v-temp').textContent = temp.toFixed(1) + ' K';
+  document.getElementById('v-temp').className = 'vitals-val ' + (temp > 200 ? 'hot' : temp > 50 ? '' : 'cold');
+  document.getElementById('plasma-fill').style.width = pct.toFixed(1) + '%';
+}
 
-        setInterval(fetchAgentsAndPeers, 2000);
-        fetchAgentsAndPeers(); // initial call
-    </script>
+function updateSystemVitals(d) {
+  if (d.vram) document.getElementById('v-vram').textContent = d.vram;
+  if (d.pulse_count !== undefined) document.getElementById('v-pulse').textContent = d.pulse_count;
+  if (d.node_count !== undefined) document.getElementById('v-nodes').textContent = d.node_count;
+  if (d.sublimated !== undefined) document.getElementById('v-sublim').textContent = d.sublimated;
+  if (d.snr !== undefined) document.getElementById('v-snr').textContent = (d.snr * 100).toFixed(0) + '%';
+  if (d.recall !== undefined) document.getElementById('v-recall').textContent = (d.recall * 100).toFixed(0) + '%';
+}
+
+async function fetchBusPeers() {
+  try {
+    const r = await fetch(API + '/bus/peers');
+    const d = await r.json();
+    renderPeers(d.peers || d || []);
+  } catch {
+    renderPeers([]);
+  }
+}
+
+function renderPeers(peers) {
+  const el = document.getElementById('peers-list');
+  if (!peers.length) {
+    el.innerHTML = '<div class="no-peers">no peers connected</div>';
+    return;
+  }
+  el.innerHTML = peers.map(p => `
+    <div class="peer-row">
+      <div class="peer-dot ${p.status === 'active' ? '' : 'offline'}"></div>
+      <div class="peer-name">${p.name || p.url}</div>
+      <div class="peer-status">${p.status || 'unknown'}</div>
+    </div>
+  `).join('');
+}
+
+// ── Uptime ───────────────────────────────────────────────────────────────────
+function tickUptime() {
+  const secs = Math.floor((Date.now() - startTime) / 1000);
+  const h = String(Math.floor(secs / 3600)).padStart(2, '0');
+  const m = String(Math.floor((secs % 3600) / 60)).padStart(2, '0');
+  const s = String(secs % 60).padStart(2, '0');
+  document.getElementById('v-uptime').textContent = `${h}:${m}:${s}`;
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+connectWS();
+fetchAgents();
+fetchBusPeers();
+setInterval(tickUptime, 1000);
+setInterval(() => {
+  if (activeAgent) fetchAgentStatus(activeAgent);
+  fetchBusPeers();
+}, 5000);
+
+// Passive plasma decay simulation when idle
+setInterval(() => {
+  if (plasmaTemp > 0 && document.getElementById('v-status').textContent === 'idle') {
+    const activeAgentData = (window._agents || []).find(a => a.name === activeAgent);
+    const k = activeAgentData ? (activeAgentData.cooling_constant || 0.003) : 0.003;
+    const decayed = Math.max(0, plasmaTemp * Math.exp(-k * 5));
+    updatePlasma(decayed, 500);
+  }
+}, 5000);
+</script>
 </body>
 </html>

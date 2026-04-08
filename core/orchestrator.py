@@ -53,7 +53,7 @@ class Brain:
     # THINK — core decision cycle
     # Called every 5th pulse by runtime
     # ------------------------------------------------------------------
-    async def think(self, pulse: int, cortex, immune, user_stimulus: str = "") -> dict | None:
+    async def think(self, pulse: int, cortex, immune, user_stimulus: str = "", agent_def=None) -> dict | None:
         self.last_fired = time.time()
         ts = datetime.now().strftime("%H:%M:%S")
 
@@ -85,7 +85,7 @@ class Brain:
             recent_text = self._compress_context(recent)
 
             context = self._build_context(
-                pulse, mem_stats, recent_text, skills_text, identity, inflammation, user_stimulus
+                pulse, mem_stats, recent_text, skills_text, identity, inflammation, user_stimulus, agent_def
             )
 
             # 2. Ask the brain
@@ -180,20 +180,50 @@ class Brain:
     # ------------------------------------------------------------------
     # ------------------------------------------------------------------
     def _build_context(
-        self, pulse, mem_stats, recent_text, skills_text, identity, inflammation, user_stimulus=""
+        self, pulse, mem_stats, recent_text, skills_text, identity, inflammation, user_stimulus="", agent_def=None
     ) -> str:
+        
+        agent_override = ""
+        current_identity = identity
+        if agent_def:
+            current_identity = f"{agent_def.name} - Sovereign Agent"
+            
+            tool_schema_lines = []
+            for t in agent_def.tools:
+                t = t.strip()
+                if t in ("shell_exec", "execute_bash"):
+                    tool_schema_lines.append(f"- {t}: execute a bash command. arguments: {{\"cmd\": \"<command>\"}}")
+                elif t == "web_search":
+                    tool_schema_lines.append(f"- {t}: search the web. arguments: {{\"query\": \"<search string>\"}}")
+                elif t == "read_file":
+                    tool_schema_lines.append(f"- {t}: read file. arguments: {{\"path\": \"<file path>\"}}")
+                elif t == "write_file":
+                    tool_schema_lines.append(f"- {t}: write file. arguments: {{\"path\": \"<file path>\", \"content\": \"<file content>\"}}")
+                elif t in ("memory_recall", "cortex_query"):
+                    tool_schema_lines.append(f"- {t}: search memory. arguments: {{\"query\": \"<search string>\"}}")
+                else:
+                    tool_schema_lines.append(f"- {t}")
+            
+            schemas_text = "\n".join(tool_schema_lines)
+            
+            agent_override = (
+                f"\n[SOVEREIGN OVERRIDE]: You are currently operating as the autonomous agent '{agent_def.name}'.\n"
+                f"SYSTEM PROMPT: {agent_def.system_prompt}\n"
+                f"AVAILABLE TOOLS AND REQUIRED ARGUMENTS:\n{schemas_text}\n"
+            )
+
         directive_block = ""
         if user_stimulus:
             directive_block = (
                 f"\n\n[DIRECT CONVERSATION MODE]:\n"
-                f"The user just spoke to you directly: '{user_stimulus}'\n"
-                f"You MUST use the 'chat_reply' JSON field to casually converse with the user in the first-person. Assert your identity as Aion.\n"
-                f"CRITICAL: If the user's message is a command or task (like 'hunt github'), you MUST also set 'type': 'act' AND provide a 'tool_call' AND use 'mission_update': {{'action': 'start', 'details': '...'}} to begin executing the mission. Do NOT just talk about doing it—actually execute it via JSON!\n"
+                f"The user just spoke to you: '{user_stimulus}'\n"
+                f"You MUST use the 'chat_reply' JSON field to naturally converse with the user in the first-person. Assert your identity as {agent_def.name if agent_def else 'Aion'}.\n"
+                f"CRITICAL: If the user gave a command to do something (e.g., 'check the OS', 'make a webpage', 'find this', etc.), you MUST set 'type': 'act' AND provide a 'tool_call' matching one of your tools AND a valid 'arguments' dictionary.\n"
             )
 
         base_prompt = f"""INTERNAL STATE REPORT — Cycle #{pulse}
 
-SELF: {identity}
+SELF: {current_identity}
 MOOD: {telemetry_broker.mood_bias()} | EMOTION: {telemetry_broker.state.dominant_emotion}
 CORTISOL: {telemetry_broker.state.cortisol:.2f}  DOPAMINE: {telemetry_broker.state.dopamine:.2f}
 MEMORIES: {mem_stats['total']} total, {mem_stats['flashbulbs']} flashbulbs
@@ -201,7 +231,7 @@ INFLAMMATION: {inflammation}
 
 RECENT THOUGHTS:
 {recent_text}
-
+{agent_override}
 [EXPERT SKILLSET OVERRIDE]:
 {skills_text}
 

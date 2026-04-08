@@ -75,6 +75,10 @@ class AdapterLifecycleManager:
         """
         print(f"[LifecycleMgr] VRAM eviction daemon started "
               f"(poll interval: {self.interval}s).")
+        
+        # Initial sync to pick up resident adapters from previous runs
+        await self.client.sync_loaded_adapters()
+
         try:
             while True:
                 await asyncio.sleep(self.interval)

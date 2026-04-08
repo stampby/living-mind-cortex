@@ -87,14 +87,18 @@ class AgentBus:
 
     def __init__(
         self,
-        db_pool: "asyncpg.Pool",
+        cortex_engine,
         local_url: str,
         htp: "HolographicTransferProtocol",
     ) -> None:
-        self._pool     = db_pool
+        self._cortex   = cortex_engine
         self._local    = local_url.rstrip("/")
         self._htp      = htp
         self._client: httpx.AsyncClient | None = None
+
+    @property
+    def _pool(self):
+        return self._cortex._pool
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
