@@ -3,20 +3,39 @@ Living Mind — API entry point
 FastAPI + lifespan that boots the runtime.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from core.runtime import runtime
 from api.events import manager
 from state.telemetry_broker import telemetry_broker
 from core.security_perimeter import immune
 from cortex.engine import cortex
+from cortex.thermorphic import substrate as _thermal_substrate
 from api.agent_gateway import router as agent_router
+from sovereign.heartbeat import SovereignHeartbeat
+
+# ── Autonomic Heartbeat (shared singletons — same memory universe as recall()) ─
+heartbeat = SovereignHeartbeat(
+    substrate=_thermal_substrate,
+    cortex=cortex,
+    tick_rate_seconds=60,
+    idle_threshold_seconds=3600,
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await runtime.birth()
+    # Ignite the autonomic nervous system — runs alongside the runtime pulse
+    pulse_task = asyncio.create_task(heartbeat.start())
     yield
+    # Clean shutdown
+    pulse_task.cancel()
+    try:
+        await pulse_task
+    except asyncio.CancelledError:
+        pass
     await runtime.death()
 
 app = FastAPI(
@@ -25,6 +44,12 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# ── I/O Middleware — resets REM idle timer on every interaction ───────────────
+@app.middleware("http")
+async def register_io_middleware(request: Request, call_next):
+    heartbeat.register_io()
+    return await call_next(request)
 
 # Agent Gateway — bridge between Living Mind and Antigravity
 app.include_router(agent_router)
@@ -44,6 +69,10 @@ if os.path.exists(ui_path):
 @app.get("/status")
 async def status():
     return await runtime.vitals()
+
+@app.get("/heartbeat/stats")
+async def heartbeat_stats():
+    return heartbeat.stats()
 
 @app.get("/memory/stats")
 async def memory_stats():
@@ -146,6 +175,34 @@ async def inject_agent_memory(msg: InjectMemory):
         context=msg.context
     )
     return {"status": "injected"}
+
+from fastapi import BackgroundTasks
+
+class TracePayload(BaseModel):
+    source: str
+    type: str
+    content: str
+    metadata: dict
+
+@app.post("/api/agent/trace")
+async def inject_agent_trace(payload: TracePayload, background_tasks: BackgroundTasks):
+    """
+    Receives passive telemetry from the local agent wrapper (ALEPH IDE).
+    Passes ingestion to a background task so local UI inference loops are not blocked.
+    """
+    formatted_content = f"[{payload.type.upper()}] {payload.content}"
+    
+    background_tasks.add_task(
+        cortex.remember,
+        content=formatted_content,
+        type="episodic",
+        importance=0.2, # Low thermal heat for passive logs
+        tags=["agent_trace", payload.source, payload.type],
+        emotion="neutral",
+        source="experienced", # DB Constraint: experienced|told|generated|inferred
+        context=str(payload.metadata)
+    )
+    return {"status": "ingested"}
 
 @app.post("/api/agent/stimulate")
 async def stimulate_agent_hormone(msg: StimulateHormone):

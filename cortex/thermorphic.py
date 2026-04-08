@@ -154,18 +154,97 @@ class FusionEvent:
 
 _TWO_PI = 2.0 * math.pi
 
-def encode_atom(word: str, dim: int = 256) -> np.ndarray:
-    """Deterministic phase vector via SHA-256 counter blocks."""
-    values_per_block = 16
-    blocks_needed = math.ceil(dim / values_per_block)
+# Global deterministic token -> phase cache (survives across pulses)
+_TOKEN_PHASE_CACHE: dict[str, np.ndarray] = {}
 
-    uint16_values: list[int] = []
-    for i in range(blocks_needed):
-        digest = hashlib.sha256(f"{word}:{i}".encode()).digest()
-        uint16_values.extend(struct.unpack("<16H", digest))
+# ── Semantic Expansion Map ────────────────────────────────────────────────────
+# Maps surface tokens to semantically related neighbors. Shared meaning is
+# captured by superposing neighbor phase vectors at a fractional weight.
+# Expand this organically as you notice recall gaps on specific concept clusters.
+_SEMANTIC_MAP: dict[str, list[str]] = {
+    # Security / credentials
+    "password":     ["credential", "secret", "key", "auth", "passcode", "pin", "login"],
+    "credential":   ["password", "login", "account", "access", "auth"],
+    "secret":       ["password", "private", "hidden", "key", "credential"],
+    "auth":         ["authenticate", "login", "credential", "access", "token"],
+    "token":        ["auth", "key", "credential", "api", "jwt"],
+    "hunter2":      ["password", "secret", "credential"],
 
-    phases = np.array(uint16_values[:dim], dtype=np.float64) * (_TWO_PI / 65536.0)
-    return phases
+    # Infrastructure / systems
+    "server":       ["host", "machine", "node", "instance", "backend"],
+    "database":     ["db", "postgres", "storage", "table", "sql"],
+    "db":           ["database", "postgres", "storage"],
+    "postgres":     ["database", "db", "sql", "pg"],
+    "api":          ["endpoint", "route", "service", "interface"],
+    "host":         ["server", "machine", "node"],
+    "alpha":        ["server", "primary", "host", "main"],
+    "online":       ["running", "active", "up", "live"],
+    "down":         ["offline", "stopped", "failed", "crash"],
+    "error":        ["failure", "crash", "exception", "bug", "fault"],
+    "failure":      ["error", "crash", "down", "fault"],
+
+    # Memory / cognitive
+    "memory":       ["recall", "remember", "store", "knowledge", "cognition"],
+    "recall":       ["retrieve", "remember", "fetch", "query", "search", "memory"],
+    "remember":     ["recall", "store", "memory", "retain"],
+    "forget":       ["decay", "lose", "drop", "crystallize"],
+    "knowledge":    ["memory", "fact", "semantic", "information"],
+
+    # Agent / AI
+    "agent":        ["zola", "bot", "daemon", "autonomous", "sovereign"],
+    "zola":         ["agent", "daemon", "autonomous"],
+    "pipeline":     ["workflow", "process", "chain", "flow"],
+    "deploy":       ["launch", "start", "run", "ship"],
+
+    # Query paraphrases
+    "what":         ["tell", "show", "recall", "find", "get"],
+    "tell":         ["what", "show", "recall", "explain"],
+    "find":         ["search", "recall", "locate", "get"],
+    "show":         ["tell", "recall", "display", "what"],
+
+    # Security hardening domain
+    "secure":       ["safe", "protected", "encrypted", "hardened"],
+    "encrypted":    ["secure", "encoded", "protected", "cipher"],
+    "protect":      ["secure", "guard", "defend", "harden"],
+}
+
+
+def _get_token_vec(token: str, dim: int) -> np.ndarray:
+    """Fetch or generate a deterministic phase unit vector for a token."""
+    if token not in _TOKEN_PHASE_CACHE:
+        seed = int(hashlib.sha256(token.encode("utf-8")).hexdigest(), 16) % (2**32)
+        rng = np.random.default_rng(seed)
+        _TOKEN_PHASE_CACHE[token] = np.exp(1j * rng.uniform(0, 2 * np.pi, dim))
+    return _TOKEN_PHASE_CACHE[token]
+
+
+def encode_atom(content: str, dim: int = 256, expansion_weight: float = 0.65) -> np.ndarray:
+    """
+    Compositional HRR semantic encoding with semantic expansion.
+
+    Each token contributes its phase vector at full weight (1.0), and its
+    semantic neighbors contribute at expansion_weight (default 0.65).
+    Shared vocabulary AND shared meaning both produce high cosine similarity.
+    Zero extra dependencies — entirely deterministic and offline.
+    """
+    if not content:
+        return np.zeros(dim, dtype=np.float64)
+
+    tokens = content.lower().split()
+    ngrams = tokens + [a + b for a, b in zip(tokens, tokens[1:])]
+
+    complex_sum = np.zeros(dim, dtype=complex)
+
+    for token in ngrams:
+        # Primary token at full weight
+        complex_sum += _get_token_vec(token, dim)
+
+        # Semantic neighbors at reduced weight
+        for neighbor in _SEMANTIC_MAP.get(token, []):
+            complex_sum += expansion_weight * _get_token_vec(neighbor, dim)
+
+    phase_vec = np.angle(complex_sum) % (2 * np.pi)
+    return phase_vec.astype(np.float64)
 
 def _random_hvec(dims: int = 256) -> np.ndarray:
     """Random phase vector in [0, 2π). Used when no content string available."""

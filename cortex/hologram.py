@@ -2,88 +2,98 @@ import numpy as np
 import logging
 from typing import Dict, Any, Tuple
 
-# Constants
 _TWO_PI = 2.0 * np.pi
 
 logger = logging.getLogger("SovereignHologram")
 
 class HolographicSuperposition:
-    """
-    Holographic Superposition Memory (HSM)
-    
-    Operates on Fractional Holographic Reduced Representations (FHRR).
-    Phase vectors [0, 2π) are projected to the complex unit circle e^{i \\phi}.
-    - Superposition (Memory Pooling): Complex addition
-    - Binding (Association): Phase addition (modulo 2π) / Complex multiplication
-    - Unbinding: Phase subtraction (modulo 2π) / Complex conjugate multiplication
-    
-    This layer provides O(D) time complexity recall by algebraically decoding
-    the associated target memory directly from the superposition hologram, 
-    completely bypassing O(N * D) cosine looping.
-    """
-
-    def __init__(self, dims: int = 256):
-        self.dims = dims
-        # The rolling superposition state (starts as empty complex vector)
-        self.hologram = np.zeros(self.dims, dtype=np.complex128)
-        # We also keep track of what's currently in the hologram to map algebraic hits to textual nodes.
+    def __init__(self, dims=256, dim=None):
+        self.dims = dim if dim is not None else dims
+        self.complex_holo = np.zeros(self.dims, dtype=complex)
         self.active_hot_nodes: Dict[str, Any] = {}
-
-    def update(self, hot_nodes: Dict[str, Any]) -> None:
-        """
-        Re-superimpose the current hot path. 
-        Because nodes thermally decay and freeze out of the hot zone, we 
-        fully rebuild the hologram from the current active hot nodes to prevent drift.
-        """
-        self.active_hot_nodes = hot_nodes
-        self.hologram = np.zeros(self.dims, dtype=np.complex128)
-
-        for node in hot_nodes.values():
-            # Project to complex plane and superimpose
-            # Vector magnitude is intrinsically 1.0 per term
-            self.hologram += np.exp(1j * node.hvec)
-
-        # Normalization / Phase collapse
-        # As per guidance, we collapse back to pure phase vectors for query matching,
-        # or we keep the complex sum for continuous SNR weighting. We will keep
-        # the complex interference pattern natively, as it correctly weights strong signals.
-        pass
-
+        
+    def decode_magnitude(self) -> float:
+        return float(np.mean(np.abs(self.complex_holo)))
+        
+    def superpose(self, hvecs: list[np.ndarray]):
+        """Superpose a list of phase vectors by projecting to complex plane."""
+        for phi in hvecs:
+            c = np.exp(1j * phi)
+            self.complex_holo += c
+            
     def unbind(self, query_hvec: np.ndarray) -> np.ndarray:
         """
-        Extract the memory mathematically.
-        Since our substrate currently uses single atomic vectors per memory 
-        (rather than bound key-value pairs), the superposition serves as a 
-        holistic context vector. We simply return the phase of the complex 
-        superposition to be mathematically scored against candidates.
+        Unbinds a query phase vector from the complex superposition.
+        Equivalent to Hologram * Conj(Query).
+        """
+        probe = np.exp(1j * query_hvec)
+        decoded_complex = self.complex_holo * np.conj(probe)
+        decoded_phase = np.angle(decoded_complex) % _TWO_PI
+        return decoded_phase
         
-        Returns:
-            candidate_phase: pure phase vector [0, 2pi) of the superposition
+    def update(self, hot_nodes: Dict[str, Any]):
         """
-        # Collapse back to phase space [0, 2π)
-        candidate_phase = np.mod(np.angle(self.hologram), _TWO_PI)
-        return candidate_phase
-
-    def decode_magnitude(self) -> float:
+        Refresh the hologram using the currently active nodes from the thermal cycle.
         """
-        Returns the average magnitude of the superposition vector.
-        Acts as a rough proxy for Signal-to-Noise Ratio (SNR).
-        A random walk of N unit vectors has expected magnitude sqrt(N).
-        """
-        return float(np.mean(np.abs(self.hologram)))
+        self.active_hot_nodes = hot_nodes
+        self.complex_holo = np.zeros(self.dims, dtype=complex)
+        
+        active_hvecs = [n.hvec for n in hot_nodes.values() if n.hvec is not None]
+        if active_hvecs:
+            self.superpose(active_hvecs)
 
     def decode_best_match(self, candidate_phase: np.ndarray) -> Tuple[Any, float]:
         """
-        Finds the closest actual active node to the algebraically decoded candidate phase.
-        (O(N_active) lookup where N_active is bounded by the thermal threshold capacity).
+        Cleanup step: compare the algebraically unbound phase against active nodes.
+        Note for Auto-Association: To check if Q is in H natively, we compare Angle(H) with Q directly.
+        If candidate_phase already is (H - Q), then node matching depends on the associative topology.
         """
         best_node = None
         best_score = -2.0
 
         for node in self.active_hot_nodes.values():
+            # Standard HRR cosine phase similarity
             score = float(np.mean(np.cos(candidate_phase - node.hvec)))
             if score > best_score:
                 best_score = score
                 best_node = node
                 
         return best_node, best_score
+
+if __name__ == "__main__":
+    # VERIFICATION BLOCK
+    # Testing SNR degradation against N_hot
+    dim = 256
+    
+    print(f"--- HSM SNR DEGRADATION TEST (D={dim}) ---")
+    print(f"Theoretical Cliff: ~{int(0.5 * np.sqrt(dim))} items\\n")
+    
+    for n_memories in [5, 10, 16, 25, 50, 100]:
+        hsm = HolographicSuperposition(dim=dim)
+        
+        # Following the snippet structure provided, but matching the new complex methods.
+        # Generating Key-Value bindings for pure algebraic evaluation
+        keys = np.random.uniform(0, 2*np.pi, (n_memories, dim))
+        values = np.random.uniform(0, 2*np.pi, (n_memories, dim))
+        
+        # Traces: K * V (phase addition)
+        traces = [(k + v) % _TWO_PI for k, v in zip(keys, values)]
+        
+        # Superpose into one complex hologram
+        hsm.superpose(traces)
+        
+        # Query for the first item
+        target_idx = 0
+        query_key = keys[target_idx]
+        actual_target = values[target_idx]
+        
+        # Unbind -> surfaces Noisy V
+        recovered_noisy_target = hsm.unbind(query_key)
+        
+        # Measure Signal vs Noise
+        target_sim = np.mean(np.cos(recovered_noisy_target - actual_target))
+        
+        noise_sims = [np.mean(np.cos(recovered_noisy_target - values[i])) for i in range(1, n_memories)]
+        avg_noise = np.mean(noise_sims) if noise_sims else 0.0
+        
+        print(f"N={n_memories:<3} | Target Sim: {target_sim:.3f} | Noise Floor: {avg_noise:.3f} | Margin: {target_sim - avg_noise:.3f}")

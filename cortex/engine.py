@@ -14,13 +14,14 @@ import json
 import time
 import asyncio
 import asyncpg
+import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional
 from datetime import datetime
 
 from cortex.thermorphic import substrate as _thermal_substrate, FREEZE_TEMP
 
-DATABASE_URL = "postgresql://user@/living_mind?host=/var/run/postgresql"
+DATABASE_URL = "postgresql://frost@/living_mind?host=/var/run/postgresql"
 
 # Emotional encoding boosts (importance multipliers)
 EMOTION_BOOSTS = {
@@ -170,38 +171,46 @@ class Cortex:
         memories = []
         
         # ── 1. Holographic Superposition Memory (HSM) Primary Path ──────────
+        # Auto-Associative Item Memory: no unbind. Score query directly against
+        # each hot node's semantic hvec. O(D) encode + O(N_hot) compare, N_hot << N.
         from cortex.thermorphic import encode_atom
-        query_hvec = encode_atom(query, dims=256)
-        candidate_phase = _thermal_substrate.hsm.unbind(query_hvec)
-        best_node, best_score = _thermal_substrate.hsm.decode_best_match(candidate_phase)
+        query_hvec = encode_atom(query, dim=256)
         
         # Track if HSM found something to avoid duplicating in TRGM
         hsm_content_prefix = ""
         
-        # Threshold must account for N-element interference: approx scaling is 1/sqrt(N_hot)
-        # We start with 0.45 as a conservative threshold for small sets of hot nodes.
-        if best_node and best_score > 0.45:
-            import logging
-            logging.getLogger("CortexEngine").info(
-                f"🔥 HSM Algebraic Hit (Score: {best_score:.3f}): {best_node.content[:60]}"
-            )
-            hsm_content_prefix = best_node.content[:100] + "%"
+        hot_nodes = _thermal_substrate.hsm.active_hot_nodes
+        if hot_nodes:
+            scores = []
+            for node in hot_nodes.values():
+                # Phase-space cosine: mean(cos(query - node)) ∈ [-1, 1]
+                sim = float(np.mean(np.cos(query_hvec - node.hvec)))
+                scores.append((sim, node))
+            scores.sort(key=lambda x: x[0], reverse=True)
+            best_score, best_node = scores[0]
             
-            # Fetch the associated node from DB
-            async with self._pool.acquire() as conn:
-                row = await conn.fetchrow("""
-                    SELECT id, content, type, tags, importance, created_at,
-                           last_accessed, access_count, emotion, confidence,
-                           context, source, linked_ids, metadata,
-                           is_flashbulb, is_identity,
-                           1.0 AS sim
-                    FROM memories
-                    WHERE content LIKE $1
-                    LIMIT 1
-                """, hsm_content_prefix)
-                if row:
-                    memories.append(self._row_to_memory(row))
-                    limit -= 1  # reduce limit for fallback
+            if best_node and best_score > 0.30:
+                import logging
+                logging.getLogger("CortexEngine").info(
+                    f"🔥 HSM Semantic Hit (Score: {best_score:.3f}): {best_node.content[:60]}"
+                )
+                hsm_content_prefix = best_node.content[:100] + "%"
+                
+                # Fetch full record from DB by content prefix
+                async with self._pool.acquire() as conn:
+                    row = await conn.fetchrow("""
+                        SELECT id, content, type, tags, importance, created_at,
+                               last_accessed, access_count, emotion, confidence,
+                               context, source, linked_ids, metadata,
+                               is_flashbulb, is_identity,
+                               1.0 AS sim
+                        FROM memories
+                        WHERE content LIKE $1
+                        LIMIT 1
+                    """, hsm_content_prefix)
+                    if row:
+                        memories.append(self._row_to_memory(row))
+                        limit -= 1  # reduce limit for fallback
 
         # ── 2. pg_trgm Fallback Path ──────────────────────────────────────────
         
@@ -277,43 +286,110 @@ class Cortex:
 
     async def _apply_priming(self, primary_memories: list[Memory]) -> list[Memory]:
         """
-        Multi-hop spreading activation. If we hit A, link B and C get a boost.
+        Multi-hop spreading activation.
+        Two pathways:
+          1. Explicit linked_ids (1.15× importance boost — original)
+          2. Hebbian memory_graph edges (strength × 0.25 additive boost)
+             REM wires these; they surface contextually adjacent nodes
+             that wouldn't otherwise clear the semantic similarity threshold.
         """
         if not primary_memories:
             return []
-            
+
+        top_id = primary_memories[0].id  # highest-ranked hit is the Hebbian anchor
+
+        # ── Path 1: Explicit linked_ids ──────────────────────────────────────
         linked_ids = []
         for m in primary_memories:
             linked_ids.extend(m.linked_ids)
-            
-        if not linked_ids:
-            return primary_memories
-            
+
+        primed: list[Memory] = []
+        all_primary_ids = [m.id for m in primary_memories]
+
         async with self._pool.acquire() as conn:
-            # Multi-hop Spreading Activation (1.15x boost for linked neighbors)
-            rows = await conn.fetch("""
-                SELECT id, content, type, tags, importance, created_at,
-                       last_accessed, access_count, emotion, confidence,
-                       context, source, linked_ids, metadata,
-                       is_flashbulb, is_identity
-                FROM memories
-                WHERE id = ANY($1)
-                  AND id != ALL($2)
-                LIMIT 5
-            """, list(set(linked_ids)), [m.id for m in primary_memories])
-            
-            primed = []
-            for r in rows:
+            if linked_ids:
+                rows = await conn.fetch("""
+                    SELECT id, content, type, tags, importance, created_at,
+                           last_accessed, access_count, emotion, confidence,
+                           context, source, linked_ids, metadata,
+                           is_flashbulb, is_identity
+                    FROM memories
+                    WHERE id = ANY($1)
+                      AND id != ALL($2)
+                    LIMIT 5
+                """, list(set(linked_ids)), all_primary_ids)
+                for r in rows:
+                    m = self._row_to_memory(r)
+                    m.importance *= 1.15   # classic spreading activation boost
+                    primed.append(m)
+
+            # ── Path 2: Hebbian neighbors of the top hit ──────────────────────
+            # Fetch Hebbian edges anchored on the top-ranked primary memory.
+            # Presence in memory_graph.strength > 0 means they co-fired during
+            # a waking session and were wired by REM Phase 2.
+            already_seen = set(all_primary_ids) | {m.id for m in primed}
+            hebbian_rows = await conn.fetch("""
+                SELECT m.id, m.content, m.type, m.tags, m.importance,
+                       m.created_at, m.last_accessed, m.access_count,
+                       m.emotion, m.confidence, m.context, m.source,
+                       m.linked_ids, m.metadata, m.is_flashbulb, m.is_identity,
+                       mg.strength AS hebbian_strength
+                FROM memory_graph mg
+                JOIN memories m ON m.id = mg.target_id
+                WHERE mg.source_id = $1::uuid
+                  AND mg.relationship = 'hebbian'
+                  AND mg.strength > 0.15
+                  AND m.id != ALL($2::uuid[])
+                ORDER BY mg.strength DESC
+                LIMIT 3
+            """, top_id, list(already_seen))
+
+            for r in hebbian_rows:
                 m = self._row_to_memory(r)
-                m.importance *= 1.15  # Spreading activation cascade
+                hebbian_boost = float(r["hebbian_strength"]) * 0.25
+                m.importance = min(1.0, m.importance + hebbian_boost)
+                m.metadata["hebbian_primed"] = True
+                m.metadata["hebbian_strength"] = round(float(r["hebbian_strength"]), 3)
                 primed.append(m)
-                
+
         return primary_memories + primed
 
 
     # ------------------------------------------------------------------
-    # EMOTIONAL RECALL — surface memories by emotion (fear first)
+    # HEBBIAN WIRING — called by REM Phase 2 during idle consolidation
     # ------------------------------------------------------------------
+    async def process_hebbian_wiring(self, window_seconds: int = 3600) -> int:
+        """
+        Neurons that fire together, wire together.
+        Cross-joins all memories accessed within window_seconds and upserts
+        bidirectional Hebbian edges into memory_graph with strength += 0.1,
+        capped at 1.0. Returns the number of edges written.
+        """
+        async with self._pool.acquire() as conn:
+            result = await conn.execute("""
+                WITH waking_nodes AS (
+                    SELECT id FROM memories
+                    WHERE last_accessed >= extract(epoch from now()) - $1
+                      AND type != 'episodic'  -- skip low-signal pulse heartbeats
+                )
+                INSERT INTO memory_graph (source_id, target_id, relationship, strength)
+                SELECT a.id, b.id, 'hebbian', 0.1
+                FROM waking_nodes a
+                CROSS JOIN waking_nodes b
+                WHERE a.id != b.id
+                ON CONFLICT (source_id, target_id, relationship)
+                DO UPDATE SET
+                    strength = LEAST(1.0, memory_graph.strength + 0.1);
+            """, float(window_seconds))
+
+        # Postgres execute() returns 'INSERT 0 N' string
+        try:
+            edges_written = int(result.split()[-1])
+        except Exception:
+            edges_written = -1
+
+        print(f"[HEBBIAN] Wired {edges_written} co-activation edges into memory_graph.")
+        return edges_written
     async def emotional_recall(
         self,
         query: str,
