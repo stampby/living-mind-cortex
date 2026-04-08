@@ -25,6 +25,8 @@ import random
 import urllib.request
 import json
 import re
+import argparse
+import subprocess
 from typing import List
 
 sys.path.insert(0, ".")
@@ -125,7 +127,7 @@ class FlatVectorDB:
 
 # ── 4. Main Benchmark ─────────────────────────────────────────────────────────
 
-def run_benchmark():
+def run_benchmark(dims=64, freeze_dwell=5, pulses=15):
     print(f"\n{'='*70}")
     print("  COGNITIVE CONTINUITY EVAL (E2E Agent Task Utility)")
     print(f"{'='*70}\n")
@@ -143,7 +145,7 @@ def run_benchmark():
     
     flat_db   = FlatVectorDB()
     thermo_db = ThermorphicSubstrate()
-    thermo_db.DIMS = 64
+    thermo_db.DIMS = dims
     
     # 2. Inject into both systems
     print("[*] Learning phase...")
@@ -152,12 +154,12 @@ def run_benchmark():
         
         # Thermorphic system: map importance to temperature (0.3 to 1.8)
         temp = 0.3 + (imp * 1.5)
-        thermo_db.inject(content, temperature=temp, tags=["chronosdb"], dims=64)
+        thermo_db.inject(content, temperature=temp, tags=["chronosdb"], dims=dims)
         
     # 3. Time passes for the agent... (Pulse loop runs)
-    print("[*] Weeks pass... (Running Thermorphic Pulses)")
-    _thermo_mod.FREEZE_DWELL = 5  # Speed up crystallization for benchmark
-    for _ in range(15):
+    print(f"[*] Weeks pass... (Running {pulses} Thermorphic Pulses)")
+    _thermo_mod.FREEZE_DWELL = freeze_dwell
+    for _ in range(pulses):
         thermo_db.pulse()
         
     # 4. Evaluation Tasks
@@ -238,7 +240,10 @@ Answer concisely."""
     print(f"{'='*70}")
     print(f"  Metric                     | Flat DB (RAG) | Thermorphic Cortex")
     print(f"  ---------------------------|---------------|-------------------")
-    print(f"  Task Success Rate          | {results_flat['hits']/len(tasks)*100:>11.0f}% | {results_thermo['hits']/len(tasks)*100:>16.0f}%")
+    thermo_rate = results_thermo['hits']/len(tasks)*100
+    flat_rate = results_flat['hits']/len(tasks)*100
+    
+    print(f"  Task Success Rate          | {flat_rate:>11.0f}% | {thermo_rate:>16.0f}%")
     print(f"  Context Window SNR         | {flat_snr_avg*100:>11.0f}% | {thermo_snr_avg*100:>16.0f}%")
     print()
     print("  Analysis:")
@@ -247,7 +252,30 @@ Answer concisely."""
         print("  crystallized the core truths, and provided the agent with high-signal")
         print("  semantics, leading to direct task resolution improvement.")
     print(f"{'='*70}\n")
+    
+    # Snapshot save hook
+    snapshot_path = "benchmarks/thermorphic_continuity_snapshot.json"
+    with open(snapshot_path, "w") as f:
+        json.dump(thermo_db.snapshot(), f, indent=2)
+    print(f"[*] Snapshot saved to {snapshot_path}")
+
+    # Self-reflection inject directly into the benchmark's simulated cortex
+    reflection = f"Cognitive Continuity Benchmark Results: Thermorphic Substrate achieved {thermo_rate:.0f}% vs Flat DB {flat_rate:.0f}%."
+    thermo_db.inject(reflection, temperature=1.5, tags=["self_reflection", "benchmark"], dims=dims)
+    print("[*] Results injected back into Cortex as high-temp self-reflection node.")
 
 
 if __name__ == "__main__":
-    run_benchmark()
+    parser = argparse.ArgumentParser(description="Run Cognitive Continuity Evaluation")
+    parser.add_argument("--dims", type=int, default=64, help="Embedding dimensions")
+    parser.add_argument("--freeze-dwell", type=int, default=5, help="Pulses to freeze")
+    parser.add_argument("--pulses", type=int, default=15, help="Number of pulses to run")
+    args = parser.parse_args()
+
+    try:
+        commit_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.STDOUT).decode("utf-8").strip()
+    except Exception:
+        commit_hash = "unknown"
+    
+    print(f"--- Thermorphic Lineage: Commit {commit_hash} ---")
+    run_benchmark(dims=args.dims, freeze_dwell=args.freeze_dwell, pulses=args.pulses)
