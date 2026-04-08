@@ -25,7 +25,6 @@
 - [Benchmarks](#-benchmarks)
 - [Changelog](#-changelog)
 - [Roadmap](#-roadmap)
-- [Sponsor](#-sponsor)
 - [Contributing](#-contributing)
 - [License](#-license)
 
@@ -360,27 +359,6 @@ See [CHANGELOG.md](CHANGELOG.md) for full version history.
 - [ ] Web UI for memory editing / pruning
 - [ ] Plugin system for custom research tools
 - [ ] `living_mind_client` package on PyPI
-
----
-
-## 💖 Sponsor
-
-This project is built and maintained by one person, nights and weekends, with the goal of making autonomous AI agents genuinely smarter over time — not just bigger context windows.
-
-If you're using it, building on top of it, or just think the thermorphic computing idea is cool — a sponsorship helps keep the lights on and the research moving.
-
-[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-pink?logo=github-sponsors)](https://github.com/sponsors/NovasPlace)
-
-### What sponsorship funds
-
-| Tier | Amount | What it enables |
-|------|--------|-----------------|
-| ☕ Coffee | $5/mo | Keeps the server awake for nightly evolver runs |
-| 🧬 Researcher | $15/mo | Dedicated time for one architectural improvement/month |
-| 🔬 Lab Partner | $50/mo | Priority feature requests + direct Discord access + name in CREDITS |
-| 🏛️ Founder | $150/mo | Co-design sessions, early access to unreleased modules, listed as Founding Sponsor |
-
-One-time sponsorships also welcome — no pressure, no paywalls. Everything here stays MIT/Apache, forever.
 
 ---
 
