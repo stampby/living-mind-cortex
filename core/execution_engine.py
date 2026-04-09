@@ -190,14 +190,23 @@ class ExecutionEngine:
         )
 
         # Render output in chat
+        import json
+        async def _send_chat_reply(content):
+            payload = json.dumps({"type": "chat_reply", "content": content})
+            for conn in manager.active_connections:
+                try:
+                    await conn.send_text(payload)
+                except Exception:
+                    pass
+
         if display_output:
             lines = display_output.splitlines()[:50]
             truncated = "\n".join(lines)
             if len(display_output.splitlines()) > 50:
                 truncated += "\n… (truncated)"
-            await manager.broadcast_event("chat_reply", f"```\n{truncated}\n```")
+            await _send_chat_reply(f"```shell\n{truncated}\n```")
         else:
-            await manager.broadcast_event("chat_reply", "✓ Done. No output.")
+            await _send_chat_reply("✓ Done. No output.")
             
         return output, display_output
 
