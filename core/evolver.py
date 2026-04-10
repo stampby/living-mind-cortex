@@ -39,8 +39,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
-OLLAMA_URL      = "http://localhost:11434/api/generate"
-MODEL           = "gemma4-auditor"
+from core.llm_client import generate as llm_generate, MODEL
 OFFSPRING_COUNT = 4       # variants generated per nightly cycle
 FITNESS_FLOOR   = 0.3     # minimum fitness to accept a variant
 NOVELTY_WINDOW  = 0.05    # fitness delta within which novelty roll activates
@@ -435,36 +434,21 @@ class Evolver:
         return round(min(1.0, max(0.0, fitness)), 3)
 
     async def _auditor_coherence(self) -> float:
-        """Quick coherence ping from gemma4-auditor. Returns 0.5 on failure."""
+        """Quick coherence ping. Returns 0.5 on failure."""
         try:
             session = await self._get_session()
-            payload = {
-                "model":  MODEL,
-                "prompt": "Rate the cognitive coherence of a system that remembers past interactions and adapts its behavior accordingly. Reply with only a float between 0.0 and 1.0.",
-                "stream": False,
-                "options": {"temperature": 0.1, "num_predict": 10},
-            }
-            async with session.post(
-                OLLAMA_URL, json=payload,
-                timeout=aiohttp.ClientTimeout(total=8),
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    raw = data.get("response", "0.5").strip()
-                    # Extract first float-like value
-                    import re
-                    match = re.search(r"\d+\.?\d*", raw)
-                    if match:
-                        val = float(match.group())
-                        return min(1.0, max(0.0, val if val <= 1.0 else val / 10.0))
-        except aiohttp.ClientConnectorError:
-            pass  # Ollama offline — expected operational state
-        except aiohttp.ServerTimeoutError:
-            print(f"[EVOLVER] Auditor timeout (>{8}s) — defaulting coherence=0.5")
-        except aiohttp.ClientError as e:
-            print(f"[EVOLVER] Auditor transient error: {type(e).__name__}: {e}")
+            raw = await llm_generate(
+                "Rate the cognitive coherence of a system that remembers past interactions and adapts its behavior accordingly. Reply with only a float between 0.0 and 1.0.",
+                temperature=0.1, max_tokens=2048, session=session,
+            )
+            if raw:
+                import re
+                match = re.search(r"\d+\.?\d*", raw)
+                if match:
+                    val = float(match.group())
+                    return min(1.0, max(0.0, val if val <= 1.0 else val / 10.0))
         except Exception as e:
-            print(f"[EVOLVER] Auditor unexpected error: {type(e).__name__}: {e}")
+            print(f"[EVOLVER] Auditor error: {type(e).__name__}: {e}")
         return 0.5
 
     # ------------------------------------------------------------------

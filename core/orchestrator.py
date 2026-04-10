@@ -17,9 +17,7 @@ from datetime import datetime
 from state.telemetry_broker import telemetry_broker
 from core.task_engine import task_engine
 
-OLLAMA_URL  = "http://localhost:11434/api/generate"
-MODEL       = "gemma4-auditor"
-TIMEOUT     = 120 # seconds — bumped due to CPU inference fallback
+from core.llm_client import generate as llm_generate, MODEL
 SKILLS_DIR  = Path(__file__).resolve().parent.parent / "skills"
 
 # Decision types the brain can emit
@@ -304,29 +302,7 @@ JSON:
     # ------------------------------------------------------------------
     async def _call_llm(self, prompt: str) -> str | None:
         session = await self._get_session()
-        payload = {
-            "model":  MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": 0.3,
-                "top_p":       0.9,
-                "num_predict": 350,
-            },
-        }
-        try:
-            async with session.post(
-                OLLAMA_URL,
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=TIMEOUT),
-            ) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.json()
-                return data.get("response", "").strip()
-        except Exception as e:
-            print(f"[BRAIN] LLM call failed: {type(e).__name__} - {e}")
-            return None
+        return await llm_generate(prompt, max_tokens=2048, session=session)
 
     # ------------------------------------------------------------------
     # RESPONSE PARSER

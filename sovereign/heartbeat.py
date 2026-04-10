@@ -27,9 +27,7 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger("SovereignHeartbeat")
 
-OLLAMA_URL    = "http://localhost:11434/api/generate"
-DISTILL_MODEL = "gemma4-auditor"
-OLLAMA_TIMEOUT = aiohttp.ClientTimeout(total=45)
+from core.llm_client import generate as llm_generate, MODEL as DISTILL_MODEL
 
 
 class SovereignHeartbeat:
@@ -258,23 +256,11 @@ class SovereignHeartbeat:
             if self._session is None or self._session.closed:
                 self._session = aiohttp.ClientSession()
 
-            async with self._session.post(
-                OLLAMA_URL,
-                json={
-                    "model":  DISTILL_MODEL,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": 0.2, "num_predict": 300},
-                },
-                timeout=OLLAMA_TIMEOUT,
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    text = data.get("response", "").strip()
-                    if text:
-                        return text, True
+            text = await llm_generate(prompt, temperature=0.2, max_tokens=2048, session=self._session)
+            if text:
+                return text, True
         except Exception as e:
-            logger.warning(f"[REM P3] Ollama unavailable ({e}), using extractive fallback.")
+            logger.warning(f"[REM P3] LLM unavailable ({e}), using extractive fallback.")
 
         # Extractive fallback: pick the two longest / most content-dense fragments
         ranked = sorted(source_texts, key=len, reverse=True)[:3]

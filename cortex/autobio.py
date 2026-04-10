@@ -11,8 +11,7 @@ across days of subjective uptime.
 import aiohttp
 from cortex.engine import cortex
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL      = "gemma4-auditor"
+from core.llm_client import generate as llm_generate, MODEL
 
 class AutobiographicalMemory:
     def __init__(self):
@@ -62,27 +61,7 @@ class AutobiographicalMemory:
 
     async def _call_llm(self, prompt: str) -> str | None:
         session = await self._get_session()
-        payload = {
-            "model":  MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": 0.5,
-                "num_predict": 200,
-            },
-        }
-        try:
-            async with session.post(
-                OLLAMA_URL,
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=20),
-            ) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.json()
-                return data.get("response", "").strip()
-        except Exception:
-            return None
+        return await llm_generate(prompt, temperature=0.5, max_tokens=2048, session=session)
 
 # Module-level singleton
 autobio = AutobiographicalMemory()

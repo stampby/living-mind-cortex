@@ -28,8 +28,7 @@ import aiohttp
 from datetime import datetime
 from collections import defaultdict
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL      = "gemma4-auditor"
+from core.llm_client import generate as llm_generate, MODEL
 FIRE_EVERY = 6   # pulses between metacognition checks
 
 
@@ -197,28 +196,11 @@ class MetacognitionOverseer:
         )
         try:
             session = await self._get_session()
-            payload = {
-                "model":  MODEL,
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": 0.3, "num_predict": 80},
-            }
-            async with session.post(
-                OLLAMA_URL,
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=10),
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data.get("response", "").strip()[:200]
-        except aiohttp.ClientConnectorError:
-            pass  # Ollama offline — fall through to deterministic fallback
-        except aiohttp.ServerTimeoutError:
-            pass  # Model too slow — deterministic fallback is faster anyway
-        except aiohttp.ClientError as e:
-            print(f"[META] LLM transient error during self-reflect: {type(e).__name__}: {e}")
+            result = await llm_generate(prompt, max_tokens=2048, session=session)
+            if result:
+                return result[:200]
         except Exception as e:
-            print(f"[META] LLM unexpected error during self-reflect: {type(e).__name__}: {e}")
+            print(f"[META] LLM error during self-reflect: {type(e).__name__}: {e}")
         # Fallback: deterministic reflection
         fallbacks = {
             "hormone_imbalance":   "Cortisol-dopamine imbalance suppressed executive function; dopamine boost unlocks action pathways.",

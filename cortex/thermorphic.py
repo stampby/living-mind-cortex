@@ -653,15 +653,13 @@ Fact 1: [Temperature {node_a.temperature:.1f}] {node_a.content}
 Fact 2: [Temperature {node_b.temperature:.1f}] {node_b.content}
 Resolve the contradiction based on temperature recency and logic. Output ONLY the correct string content."""
         try:
-            async with aiohttp.ClientSession() as session:
-                payload = {"model": "gemma3", "prompt": prompt, "stream": False}
-                async with session.post("http://localhost:11434/api/generate", json=payload, timeout=5) as resp:
-                    ans = await resp.json()
-                    winning_text = ans.get("response", "").strip()
-                    if node_a.content.lower() in winning_text.lower():
-                        return node_a
-                    elif node_b.content.lower() in winning_text.lower():
-                        return node_b
+            from core.llm_client import generate as llm_generate
+            winning_text = await llm_generate(prompt, temperature=0.1, max_tokens=2048)
+            if winning_text:
+                if node_a.content.lower() in winning_text.lower():
+                    return node_a
+                elif node_b.content.lower() in winning_text.lower():
+                    return node_b
         except Exception:
             pass
         # Fallback to pure thermodynamic winner

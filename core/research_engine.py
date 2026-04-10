@@ -26,11 +26,13 @@ from pathlib import Path
 
 # ── Configuration: fully sovereign, no API keys needed ────────────────────
 os.environ.setdefault("RETRIEVER",   "duckduckgo")
-os.environ.setdefault("FAST_LLM",    "ollama:gemma4-auditor")
-os.environ.setdefault("SMART_LLM",   "ollama:gemma4-auditor")
-os.environ.setdefault("STRATEGIC_LLM", "ollama:gemma2:2b")
-os.environ.setdefault("EMBEDDING",   "ollama:nomic-embed-text")
-os.environ.setdefault("OLLAMA_BASE_URL", "http://localhost:11434")
+# Research engine disabled — gpt-researcher not installed (pulls cloud deps)
+# TODO: Replace with local research via Lemonade + DuckDuckGo
+os.environ.setdefault("FAST_LLM",    "openai:Qwen3.5-35B-A3B-GGUF")
+os.environ.setdefault("SMART_LLM",   "openai:Qwen3.5-35B-A3B-GGUF")
+os.environ.setdefault("STRATEGIC_LLM", "openai:Qwen3-0.6B-GGUF")
+os.environ.setdefault("EMBEDDING",   "openai:nomic-embed-text-v2-moe-GGUF")
+os.environ.setdefault("OPENAI_BASE_URL", "http://localhost:13305/api/v1")
 os.environ.setdefault("VERBOSE",     "False")
 
 # Caps to keep it fast and token-lean on local hardware

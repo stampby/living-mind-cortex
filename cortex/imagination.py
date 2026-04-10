@@ -10,8 +10,7 @@ import json
 import aiohttp
 from cortex.engine import cortex
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL      = "gemma4-auditor"
+from core.llm_client import generate as llm_generate, MODEL
 
 class ImaginationEngine:
     def __init__(self):
@@ -84,24 +83,7 @@ class ImaginationEngine:
 
     async def _call_llm(self, prompt: str) -> str | None:
         session = await self._get_session()
-        payload = {
-            "model":  MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "options": {"temperature": 0.7, "num_predict": 100}, # Higher temp for imagination!
-        }
-        try:
-            async with session.post(
-                OLLAMA_URL,
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=15),
-            ) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.json()
-                return data.get("response", "").strip()
-        except:
-            return None
+        return await llm_generate(prompt, temperature=0.7, max_tokens=2048, session=session)
 
 # Module-level singleton
 imagination = ImaginationEngine()

@@ -354,27 +354,22 @@ async def revoke_key(key_id: str):
         conn.commit()
     return {"message": "Key revoked and purged"}
 
-# ── Model Management (Ollama Proxy) ────────────────────────
-OLLAMA_URL = "http://localhost:11434"
+# ── Model Management (Lemonade Server Proxy) ────────────────────────
+LEMONADE_URL = "http://localhost:13305/api/v1"
 
 @app.get("/api/models")
 async def list_models():
     async with httpx.AsyncClient() as client:
         try:
-            r = await client.get(f"{OLLAMA_URL}/api/tags")
+            r = await client.get(f"{LEMONADE_URL}/models")
             return r.json()
         except Exception as e:
-            raise HTTPException(status_code=503, detail=f"Ollama Unreachable: {str(e)}")
+            raise HTTPException(status_code=503, detail=f"Lemonade Unreachable: {str(e)}")
 
 @app.post("/api/models/pull")
 async def pull_model(req: ModelActionRequest):
-    async with httpx.AsyncClient() as client:
-        # Note: This is an async long-running task in Ollama, we proxy the initial kick-off
-        r = await client.post(f"{OLLAMA_URL}/api/pull", json={"name": req.name, "stream": False})
-        return r.json()
+    return {"message": f"Model pull not supported via Lemonade — use lemonade CLI", "name": req.name}
 
 @app.delete("/api/models/{model_name}")
 async def delete_model(model_name: str):
-    async with httpx.AsyncClient() as client:
-        r = await client.request("DELETE", f"{OLLAMA_URL}/api/delete", json={"name": model_name})
-        return {"message": f"Model {model_name} removal requested", "status": r.status_code}
+    return {"message": f"Model deletion not supported via Lemonade — use lemonade CLI", "model": model_name}

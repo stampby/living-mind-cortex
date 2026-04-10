@@ -35,8 +35,7 @@ except ImportError as _e:
     _THERMO_AVAILABLE = False
     print(f"[DREAMS] WARNING: thermorphic module unavailable — diffusion strategy disabled: {_e}")
 
-OLLAMA_URL    = "http://localhost:11434/api/generate"
-MODEL         = "gemma4-auditor"
+from core.llm_client import generate as llm_generate, MODEL
 MIN_MEMORIES  = 10     # minimum memories needed to dream
 TIMEOUT       = 25     # seconds
 MAX_DREAMS    = 3      # max dreams per cycle
@@ -443,31 +442,11 @@ class DreamsEngine:
         self, prompt: str, strategy: str, emotion: str
     ) -> dict | None:
         session = await self._get_session()
-        payload = {
-            "model":  MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "options": {"temperature": 0.5, "num_predict": 180},
-        }
         try:
-            async with session.post(
-                OLLAMA_URL,
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=TIMEOUT),
-            ) as resp:
-                if resp.status != 200:
-                    print(f"[DREAMS] LLM non-200 ({strategy}): HTTP {resp.status}")
-                    return None
-                data = await resp.json()
-                raw  = data.get("response", "").strip()
-
-        except aiohttp.ClientConnectorError as e:
-            # Ollama is not running — expected during daytime, not worth alarming
-            print(f"[DREAMS] LLM unreachable ({strategy}): {e}")
-            return None
-        except aiohttp.ServerTimeoutError:
-            print(f"[DREAMS] LLM timeout ({strategy}): model took > {TIMEOUT}s")
-            return None
+            raw = await llm_generate(prompt, temperature=0.5, max_tokens=2048, session=session)
+            if not raw:
+                print(f"[DREAMS] LLM returned empty ({strategy})")
+                return None
         except aiohttp.ClientError as e:
             # All other aiohttp transient errors (disconnect, server error, etc.)
             print(f"[DREAMS] LLM transient error ({strategy}): {type(e).__name__}: {e}")

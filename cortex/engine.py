@@ -21,7 +21,7 @@ from datetime import datetime
 
 from cortex.thermorphic import substrate as _thermal_substrate, FREEZE_TEMP
 
-DATABASE_URL = "postgresql://frost@/living_mind?host=/var/run/postgresql"
+DATABASE_URL = "postgresql://bcloud@/living_mind?host=/var/run/postgresql"
 
 # Emotional encoding boosts (importance multipliers)
 EMOTION_BOOSTS = {

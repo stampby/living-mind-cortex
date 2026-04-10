@@ -9,8 +9,7 @@ import aiohttp
 
 BASE_DIR = Path(__file__).parent.parent
 SKILLS_DIR = BASE_DIR / "skills"
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL = "gemma4-auditor"
+from core.llm_client import generate as llm_generate, MODEL
 
 class Evolution:
     """
@@ -20,21 +19,8 @@ class Evolution:
 
     @staticmethod
     async def _invoke_llm(prompt: str) -> str:
-        payload = {
-            "model": MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "options": {"temperature": 0.3, "top_p": 0.9, "num_predict": 500}
-        }
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(OLLAMA_URL, json=payload, timeout=45) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        return data.get("response", "").strip()
-        except Exception as e:
-            print(f"[EVOLUTION] LLM error: {e}")
-        return ""
+        result = await llm_generate(prompt, max_tokens=2048)
+        return result or ""
 
     @staticmethod
     async def compress_trajectory(history: List[Dict[str, Any]], target_tokens: int = 4000) -> List[Dict[str, Any]]:

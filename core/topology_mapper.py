@@ -9,8 +9,7 @@ import asyncio
 import aiohttp
 from datetime import datetime
 
-OLLAMA_URL  = "http://localhost:11434/api/generate"
-MODEL       = "gemma4-auditor"
+from core.llm_client import generate as llm_generate, MODEL
 
 class TopologyMapper:
     def __init__(self):

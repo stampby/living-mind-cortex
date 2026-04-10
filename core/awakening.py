@@ -19,8 +19,7 @@ import yaml
 from pathlib import Path
 from datetime import datetime
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL      = "gemma4-auditor"
+from core.llm_client import generate as llm_generate, MODEL
 TIMEOUT    = 30
 
 class AwakeningEngine:
@@ -167,25 +166,7 @@ Reply ONLY with valid JSON (no markdown, no extra text):
     # ------------------------------------------------------------------
     async def _call_llm(self, prompt: str) -> str | None:
         session = await self._get_session()
-        payload = {
-            "model":  MODEL,
-            "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": 0.4, # slightly higher than brain for profound thought
-                "top_p":       0.9,
-                "num_predict": 150,
-            },
-        }
-        async with session.post(
-            OLLAMA_URL,
-            json=payload,
-            timeout=aiohttp.ClientTimeout(total=TIMEOUT),
-        ) as resp:
-            if resp.status != 200:
-                return None
-            data = await resp.json()
-            return data.get("response", "").strip()
+        return await llm_generate(prompt, temperature=0.4, max_tokens=2048, session=session)
 
     def _parse_goal(self, raw: str) -> dict | None:
         text = raw.strip()
